@@ -1,10 +1,10 @@
 import type { CSSProperties } from 'react'
 import { ArrowRight, ChevronDown } from 'lucide-react'
 import { badgeRule } from '../game/attributes'
-import type { Game } from '../game/game'
+import { progress, type Game } from '../game/game'
 import { integerText, notation, oddsText, rarities, rarityOf } from '../game/math'
 import { milestones } from '../game/progression'
-import { eras, owns, researchById, researchEra, rollGoal } from '../game/research'
+import { eras, owns, rankCost, researchById, researchEra, researchStatus } from '../game/research'
 import { BadgeCards, RarityLabel } from './shared'
 
 type Props = { game: Game; rolling: boolean; onRoll: () => void; onResearch: (id: string) => void }
@@ -15,8 +15,9 @@ export function Play({ game, rolling, onRoll, onResearch }: Props) {
   const title = roll ? notation(roll.expression) : '—'
   const tier = roll ? rarityOf(roll.probability) : rarities[0]
   const tierIndex = rarities.indexOf(tier)
-  const milestone = milestones.find(item => !owns(game.purchases, item.id))
-  const target = milestone ? rollGoal(milestone.rolls, game.lab) : 0
+  const milestoneId = milestones.find(id => !owns(game.purchases, id))
+  const milestone = milestoneId ? researchById.get(milestoneId) : undefined
+  const ready = milestone && researchStatus(milestone, progress(game), game.balance, game.lab) === 'available'
 
   return <div className="play">
     <section className="roll-chamber" aria-labelledby="roll-heading">
@@ -51,8 +52,8 @@ export function Play({ game, rolling, onRoll, onResearch }: Props) {
     </details>}
 
     {milestone && <button className="roll-milestone" aria-label="Explore research" onClick={() => onResearch(milestone.id)}>
-      <span className="milestone-label"><small>Next milestone</small><strong>{researchById.get(milestone.id)?.title}</strong></span>
-      <span className="milestone-count">{Math.min(game.rolls, target).toLocaleString()} / {target.toLocaleString()} rolls</span>
+      <span className="milestone-label"><small>Next milestone</small><strong>{milestone.title}</strong></span>
+      <span className={ready ? 'milestone-cost earned' : 'milestone-cost'}>{ready ? 'Ready to research' : integerText(rankCost(milestone, 0, game.lab)) + ' EP'}</span>
       <ArrowRight size={17} aria-hidden="true" />
     </button>}
   </div>

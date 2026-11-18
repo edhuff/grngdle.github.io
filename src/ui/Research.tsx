@@ -4,15 +4,14 @@ import { progress, type Game } from '../game/game'
 import { integerText } from '../game/math'
 import { milestones } from '../game/progression'
 import {
-  dependencies, disciplines, familyGoal, meets, owns, rankCost, research, researchById, researchEra, researchStatus, rollGoal, type Requirement,
+  dependencies, disciplines, familyGoal, meets, owns, rankCost, research, researchById, researchEra, researchStatus, type Requirement,
 } from '../game/research'
 import { expansionJunction, expansionLink, focusPath, nodeHeight, nodeWidth, overviewPath, positionOf, type Point } from './research-layout'
 
 const states = {
   complete: 'Researched', locked: 'Prerequisites unmet', exclusive: 'Specialization active', unaffordable: 'Needs EP', available: 'Available',
 }
-const milestoneIds = new Set<string>(milestones.map(item => item.id))
-const branchStarts = new Set(disciplines.map((_, index) => research.find(item => item.discipline === index)!.id))
+const milestoneIds = new Set<string>(milestones)
 
 function Requirements({ condition, game, onSelect }: { condition: Requirement; game: Game; onSelect: (id: string) => void }) {
   const complete = meets(condition, progress(game), game.lab)
@@ -23,9 +22,7 @@ function Requirements({ condition, game, onSelect }: { condition: Requirement; g
   return <div className={'requirement' + (complete ? ' met' : '')}>{complete ? <Check size={14} /> : <LockKeyhole size={13} />}
     {condition.kind === 'node'
       ? <button className="text-button" onClick={() => onSelect(condition.id)}>{researchById.get(condition.id)?.title}<ChevronRight size={13} /></button>
-      : condition.kind === 'rolls'
-        ? <span>{game.rolls.toLocaleString()} / {rollGoal(condition.amount, game.lab).toLocaleString()} manual rolls</span>
-        : condition.kind === 'families' && <span>{Object.keys(game.discoveries).length} / {familyGoal(condition.amount, game.lab)} discovered badge families</span>}
+      : condition.kind === 'families' && <span>{Object.keys(game.discoveries).length} / {familyGoal(condition.amount, game.lab)} discovered badge families</span>}
   </div>
 }
 
@@ -215,7 +212,6 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund }: {
           return <div key={item.id} className="map-point" style={{
             left: point.x - nodeWidth / 2, top: point.y - nodeHeight / 2, width: nodeWidth, height: nodeHeight, '--discipline': discipline.color,
           } as CSSProperties}>
-            {branchStarts.has(item.id) && <span className="map-branch">{discipline.short}</span>}
             <button aria-pressed={selection === item.id} title={item.title + ' · ' + states[state]}
               className={'map-node state-' + state + (milestoneIds.has(item.id) ? ' map-milestone' : '')}
               onClick={() => select(item.id)}
@@ -230,7 +226,10 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund }: {
                 }
               }}>
               <strong>{item.title}</strong>
-              <small>{state === 'complete' ? 'Researched' : integerText(rankCost(item, level, game.lab)) + ' EP'}{item.max ? ' · ' + level + '/' + item.max : ''}</small>
+              <span className="map-node-meta">
+                <small className="map-node-type" title={discipline.name}>{discipline.short}</small>
+                <small className="map-node-cost">{state === 'complete' ? 'Researched' : integerText(rankCost(item, level, game.lab)) + ' EP'}{item.max ? ' · ' + level + '/' + item.max : ''}</small>
+              </span>
               {state === 'complete' ? <Check size={15} /> : (state === 'locked' || state === 'exclusive') && <LockKeyhole size={13} />}
             </button>
           </div>

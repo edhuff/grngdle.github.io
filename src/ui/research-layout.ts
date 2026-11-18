@@ -25,19 +25,36 @@ export function positionOf(id: string): Point {
 }
 
 const expansionJunctionX = 1230
+const expansionY = positionOf('expansion').y
+const junctionBend = 12
+
+function inletBend(sourceY: number) {
+  return Math.max(0, Math.min(24, Math.abs(sourceY - expansionY) - junctionBend))
+}
 
 export function expansionJunction(sources: Point[]) {
-  const target = positionOf('expansion')
-  const top = Math.min(target.y, ...sources.map(point => point.y))
-  const bottom = Math.max(target.y, ...sources.map(point => point.y))
+  const x = expansionJunctionX
+  const y = expansionY
+  const inlets = sources.map(point => point.y + Math.sign(y - point.y) * inletBend(point.y))
+  const top = Math.min(y, ...inlets)
+  const bottom = Math.max(y, ...inlets)
+  const trunk = [
+    top < y ? `M${x},${top} V${y - junctionBend} Q${x},${y} ${x + junctionBend},${y}` : '',
+    bottom > y ? `M${x},${bottom} V${y + junctionBend} Q${x},${y} ${x + junctionBend},${y}` : '',
+  ].filter(Boolean).join(' ')
   return {
-    trunk: `M${expansionJunctionX},${top} V${bottom}`,
-    exit: `M${expansionJunctionX},${target.y} H${target.x - nodeWidth / 2}`,
+    trunk,
+    exit: `M${x + junctionBend},${y} H${positionOf('expansion').x - nodeWidth / 2}`,
   }
 }
 
 export function expansionLink(from: Point) {
-  return `M${from.x + nodeWidth / 2},${from.y} H${expansionJunctionX}`
+  const x = expansionJunctionX
+  const radius = inletBend(from.y)
+  const start = `M${from.x + nodeWidth / 2},${from.y}`
+  if (from.y === expansionY) return `${start} H${x + junctionBend}`
+  const joinY = from.y + Math.sign(expansionY - from.y) * radius
+  return `${start} H${x - radius} Q${x},${from.y} ${x},${joinY}`
 }
 
 export function overviewPath(from: Point, to: Point) {
@@ -45,6 +62,35 @@ export function overviewPath(from: Point, to: Point) {
   const end = to.x - nodeWidth / 2
   const middle = (start + end) / 2
   return `M${start},${from.y} C${middle},${from.y} ${middle},${to.y} ${end},${to.y}`
+}
+
+function roundedPath(route: Point[]) {
+  const points = route.filter((point, index) =>
+    index === 0 || point.x !== route[index - 1].x || point.y !== route[index - 1].y)
+  const segments = [`M${points[0].x},${points[0].y}`]
+
+  for (let index = 1; index < points.length - 1; index++) {
+    const [previous, corner, next] = [points[index - 1], points[index], points[index + 1]]
+    if ((previous.x === corner.x && next.x === corner.x) ||
+        (previous.y === corner.y && next.y === corner.y)) continue
+
+    const incoming = Math.hypot(previous.x - corner.x, previous.y - corner.y)
+    const outgoing = Math.hypot(next.x - corner.x, next.y - corner.y)
+    const radius = Math.min(22, incoming / 2, outgoing / 2)
+    const before = {
+      x: corner.x + (previous.x - corner.x) * radius / incoming,
+      y: corner.y + (previous.y - corner.y) * radius / incoming,
+    }
+    const after = {
+      x: corner.x + (next.x - corner.x) * radius / outgoing,
+      y: corner.y + (next.y - corner.y) * radius / outgoing,
+    }
+    segments.push(`L${before.x},${before.y} Q${corner.x},${corner.y} ${after.x},${after.y}`)
+  }
+
+  const last = points[points.length - 1]
+  segments.push(`L${last.x},${last.y}`)
+  return segments.join(' ')
 }
 
 export function focusPath(from: Point, to: Point, points: Point[]) {
@@ -102,5 +148,5 @@ export function focusPath(from: Point, to: Point, points: Point[]) {
   }
 
   const route = [offset(from, boundary), ...(best ?? [start, { x: end.x, y: start.y }, end]), offset(to, -boundary)]
-  return route.map(({ x, y }, index) => (index === 0 ? 'M' : 'L') + x + ',' + y).join(' ')
+  return roundedPath(route)
 }

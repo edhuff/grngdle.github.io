@@ -1,6 +1,5 @@
 import { initialFamilies, type BadgeFamily } from './attributes'
 import type { GeneratorOptions } from './generator'
-import { milestones } from './progression'
 
 export const disciplines = [
   { name: 'Numerical Expansion', short: 'Expansion', color: '#b59aff' },
@@ -21,7 +20,6 @@ export const eras = [
 
 export type Requirement =
   | { kind: 'node'; id: string }
-  | { kind: 'rolls'; amount: number }
   | { kind: 'families'; amount: number }
   | { kind: 'all' | 'any'; items: Requirement[] }
 
@@ -43,13 +41,12 @@ export type ResearchNode = {
   max?: number; refundable?: boolean
 }
 export type Purchases = Record<string, number>
-export type ResearchProgress = { purchases: Purchases; rolls: number; families: number }
+export type ResearchProgress = { purchases: Purchases; families: number }
 
 export const owns = (purchases: Purchases, id: string) => Object.hasOwn(purchases, id) ? purchases[id] : 0
 const node = (id: string): Requirement => ({ kind: 'node', id })
 const all = (...items: Requirement[]): Requirement => ({ kind: 'all', items })
 const any = (...items: Requirement[]): Requirement => ({ kind: 'any', items })
-const rolls = (amount: number): Requirement => ({ kind: 'rolls', amount })
 const families = (amount: number): Requirement => ({ kind: 'families', amount })
 const ep = (basis: number): Effect => ({ kind: 'ep', basis })
 const badgeEP = (family: BadgeFamily, amount = 1): Effect => ({ kind: 'familyEP', family, amount })
@@ -72,20 +69,20 @@ export const research: ResearchNode[] = [
   study(0, 'radix', 'Radix Survey', 130n, '+1 EP for stepping sequences.', [badgeEP('sequence')], node('place-value')),
   study(0, 'boundaries', 'Boundary Survey', 360n, '+1 EP for mathematical landmarks.', [badgeEP('landmarks')], node('radix')),
   study(0, 'horizon', 'The Classical Horizon', 850n, '+8% of base EP on every roll.', [ep(800)], all(node('boundaries'), node('distribution'))),
-  study(0, 'expansion', 'Beyond a Million', 35_000n, 'Unlock a new integer band through one trillion. Classical rolls remain in the pool.', [unlock('wide')], all(...classicalGoals.map(node), rolls(milestones[0].rolls)), { cost: 6_250n }),
-  study(0, 'vast', 'Arbitrary Precision', 245_000n, 'Add an integer band that reaches 10²⁴.', [unlock('vast')], all(node('expansion'), node('verification'), rolls(milestones[3].rolls)), { era: 1 }),
+  study(0, 'expansion', 'Beyond a Million', 35_000n, 'Unlock a new integer band through one trillion. Classical rolls remain in the pool.', [unlock('wide')], all(...classicalGoals.map(node)), { cost: 6_250n }),
+  study(0, 'vast', 'Arbitrary Precision', 245_000n, 'Add an integer band that reaches 10²⁴.', [unlock('vast')], all(node('expansion'), node('verification')), { era: 1 }),
 
   study(1, 'notation', 'Number Forms', 45n, '+1 EP for every landmark badge.', [badgeEP('landmarks')]),
   study(1, 'operators', 'Operator Survey', 135n, '+1 EP for every divisibility badge.', [badgeEP('divisibility')], node('notation')),
   study(1, 'syntax', 'Syntax Table', 420n, '+4% of base EP on every roll.', [ep(400)], all(node('operators'), node('place-value'))),
   study(1, 'grammar', 'Classical Grammar', 930n, '+1 EP for palindrome and sequence badges.', [badgeEP('mirror'), badgeEP('sequence')], node('syntax')),
-  study(1, 'arithmetic', 'Expression Grammar', 112_000n, 'Add ordered sums and products to the roll pool.', [unlock('arithmetic')], all(node('expansion'), node('grammar'), node('verification'), rolls(milestones[1].rolls)), { era: 1 }),
+  study(1, 'arithmetic', 'Expression Grammar', 112_000n, 'Add ordered sums and products to the roll pool.', [unlock('arithmetic')], all(node('expansion'), node('grammar'), node('verification')), { era: 1 }),
 
   study(2, 'repetition', 'Repetition', 55n, '+1 EP for double takes and repdigits.', [badgeEP('digits')]),
   study(2, 'motifs', 'Recurring Motifs', 140n, 'Discover Digit Rhythm for repeated multi-digit blocks.', [{ kind: 'family', family: 'rhythm' }], node('repetition')),
   study(2, 'symmetry', 'Symmetry', 390n, '+2 EP for palindromes.', [badgeEP('mirror', 2)], node('motifs')),
   study(2, 'pattern-model', 'Pattern Model', 810n, '+2 EP for Digit Rhythm.', [badgeEP('rhythm', 2)], all(node('symmetry'), any(node('classifier'), node('verification')))),
-  study(2, 'nesting', 'Nested Arithmetic', 160_000n, 'Add depth-two expressions and a procedural depth badge.', [unlock('nesting')], all(node('arithmetic'), node('pattern-model'), rolls(milestones[2].rolls)), { era: 2 }),
+  study(2, 'nesting', 'Nested Arithmetic', 160_000n, 'Add depth-two expressions and a procedural depth badge.', [unlock('nesting')], all(node('arithmetic'), node('pattern-model')), { era: 2 }),
 
   study(3, 'catalog', 'Badge Catalog', 40n, '+1 EP for prime badges.', [badgeEP('prime')]),
   study(3, 'squares', 'Square Recognition', 145n, 'Discover Perfect Square and its EP reward.', [{ kind: 'family', family: 'powers' }], node('catalog')),
@@ -114,9 +111,9 @@ export const research: ResearchNode[] = [
   study(7, 'verification', 'Symbolic Verification', 900n, '+7% of base EP on every roll.', [ep(700)], all(node('invariants'), node('syntax'))),
 
   study(8, 'fieldwork', 'Fieldwork', 65n, '+5% of base EP on every roll.', [ep(500)], any(node('journal'), node('yield'))),
-  study(8, 'peer-review', 'Peer Review', 225n, '+1 EP for mathematical landmarks.', [badgeEP('landmarks')], all(node('fieldwork'), rolls(20))),
+  study(8, 'peer-review', 'Peer Review', 225n, '+1 EP for mathematical landmarks.', [badgeEP('landmarks')], node('fieldwork')),
   study(8, 'synthesis', 'Research Synthesis', 620n, '+8% of base EP on every roll.', [ep(800)], all(node('peer-review'), node('motifs'), node('distribution'))),
-  study(8, 'classical-review', 'Classical Review', 1350n, '+12% of base EP on every roll.', [ep(1200)], all(node('synthesis'), node('horizon'), node('atlas'), node('capital'), rolls(280))),
+  study(8, 'classical-review', 'Classical Review', 1350n, '+12% of base EP on every roll.', [ep(1200)], all(node('synthesis'), node('horizon'), node('atlas'), node('capital'))),
   study(8, 'magnitude-focus', 'Magnitude Focus', 9000n, 'Widen symbolic operands and shift 4 percentage points toward expanded integers.', [{ kind: 'specialize', choice: 'magnitude' }], node('expansion'), { refundable: true, era: 1 }),
   study(8, 'rarity-focus', 'Rarity Focus', 9000n, 'Shift 4 percentage points toward each unlocked vast or symbolic band.', [{ kind: 'specialize', choice: 'rarity' }], node('expansion'), { refundable: true, era: 1 }),
   study(8, 'efficiency-focus', 'Efficiency Focus', 9000n, '+25% of base EP on every roll.', [{ kind: 'specialize', choice: 'efficiency' }, ep(2500)], node('expansion'), { refundable: true, era: 1 }),
@@ -149,10 +146,6 @@ export function validateResearch(nodes: readonly ResearchNode[]) {
 }
 validateResearch(research)
 
-export function rollGoal(amount: number, lab: boolean) {
-  return lab ? Math.ceil(amount / 3200) : amount
-}
-
 export function familyGoal(amount: number, lab: boolean) {
   return lab ? Math.min(amount, 4) : amount
 }
@@ -161,7 +154,6 @@ export function meets(requirement: Requirement | undefined, progress: ResearchPr
   if (!requirement) return true
   switch (requirement.kind) {
     case 'node': return owns(progress.purchases, requirement.id) > 0
-    case 'rolls': return progress.rolls >= rollGoal(requirement.amount, lab)
     case 'families': return progress.families >= familyGoal(requirement.amount, lab)
     case 'all': return requirement.items.every(item => meets(item, progress, lab))
     case 'any': return requirement.items.some(item => meets(item, progress, lab))

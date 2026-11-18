@@ -20,24 +20,23 @@ for (let index = 0; index < samples; index++) {
   baseIncome += rewards(expression, {}, baseEffects).earned
 }
 
-const milestoneIds = milestones.map(item => item.id)
 const route = classicalRoute()
 const choices = research.filter(item => route.has(item.id) && item.id !== 'expansion')
   .sort((a, b) => a.cost < b.cost ? -1 : a.cost > b.cost ? 1 : 0)
-choices.push(...milestoneIds.map(id => research.find(item => item.id === id)!))
-const results = milestoneIds.map(() => [] as number[])
+choices.push(...milestones.map(id => research.find(item => item.id === id)!))
+const results = milestones.map(() => [] as number[])
 const routedIncome: number[] = []
 
 for (let seed = 1; seed <= runs; seed++) {
   const word = seededWords(seed * 1024 + 17)
   let game = newGame()
-  for (let index = 0; index < 100_000 && !milestoneIds.every(id => owns(game.purchases, id)); index++) {
+  for (let index = 0; index < 100_000 && !milestones.every(id => owns(game.purchases, id)); index++) {
     game = manualRoll(game, word)
     for (const item of choices) {
       const rank = owns(game.purchases, item.id)
       if (rankCost(item, rank) > game.balance || researchStatus(item, progress(game), game.balance) !== 'available') continue
       game = purchase(game, item.id)
-      const milestone = milestoneIds.indexOf(item.id as typeof milestoneIds[number])
+      const milestone = milestones.indexOf(item.id as typeof milestones[number])
       if (milestone >= 0) {
         results[milestone].push(game.rolls)
         if (milestone === 0) routedIncome.push(Number(game.lifetime) / game.rolls)
@@ -48,8 +47,8 @@ for (let seed = 1; seed <= runs; seed++) {
 
 console.log(`Classical yield across ${samples.toLocaleString()} seeded draws: ${(Number(baseIncome) / samples).toFixed(3)} EP/roll`)
 if (routedIncome.length) console.log(`Average yield through first expansion: ${(routedIncome.reduce((a, b) => a + b, 0) / routedIncome.length).toFixed(3)} EP/roll`)
-console.log(`Production costs and gates; ${runs} seeded progression trials at ${secondsPerRoll}s per manual roll`)
-console.table(milestoneIds.map((milestone, index) => {
+console.log(`Production research in ${runs} seeded trials at ${secondsPerRoll} seconds per manual roll`)
+console.table(milestones.map((milestone, index) => {
   const values = results[index].sort((a, b) => a - b)
   const median = (values[Math.floor((values.length - 1) / 2)] + values[Math.floor(values.length / 2)]) / 2
   return { milestone, reached: values.length,

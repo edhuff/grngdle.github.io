@@ -19,7 +19,7 @@ npm ci
 npm run dev
 ```
 
-Open the address Vite prints, usually `http://localhost:5173`. Use **Roll** for one draw and **Research** to spend EP. The full-screen research map supports drag panning, scroll zoom, and a discipline picker. Select a node to see its requirements and connections. Collection stores notable results, and Settings manages animations and local save import, export, and reset.
+Open the address Vite prints, usually `http://localhost:5173`. Use **Roll** for one draw and **Research** to spend EP. The full-screen research map supports drag panning, scroll zoom, and a discipline picker. Each node shows its research type and uses the matching border color. Select a node to see its requirements and connections. Collection stores notable results, and Settings manages animations and local save import, export, and reset.
 
 `npm run build` produces a static site in `dist/`. `npm run preview` serves it locally. Relative asset paths work at the GitHub Pages project URL.
 
@@ -48,7 +48,7 @@ npm run balance
 npm run dev:lab -- --port 5174
 ```
 
-The developer server lowers research costs and milestone requirements. It uses a separate save and still requires a manual action for each roll. The seeded balance simulator runs from the command line and is excluded from the browser app.
+The developer server lowers research costs and badge requirements. It uses a separate save and still requires a manual action for each roll. The seeded balance simulator runs from the command line and is excluded from the browser app.
 
 With the regular server running, run `npm run test:browser` for a Chromium smoke test. Set `CHROMIUM_PATH` to use a Chromium executable outside `/usr/bin/chromium`. Pass the regular and developer server addresses to also test both mathematical unlocks in the browser.
 
@@ -56,7 +56,7 @@ With the regular server running, run `npm run test:browser` for a Chromium smoke
 npm run test:browser -- http://localhost:5173 http://localhost:5174
 ```
 
-A balance simulation sampled 250,000 base draws and ran 32 progression trials. At an assumed **7.5 active seconds per roll**, the median was **900 rolls (1.9 h)** for the first expansion, **3,000 rolls (6.3 h)** for symbolic arithmetic, **5,200 rolls (10.8 h)** for nested arithmetic, and **8,220 rolls (17.1 h)** for arbitrary precision. These estimates depend on purchase order and manual play cadence.
+Milestones unlock when their research prerequisites are met and you can afford their EP cost. In a simulation with 250,000 base draws and 32 progression trials, the median first expansion took **887 rolls (1.8 h)** at an assumed **7.5 active seconds per roll**. Later medians were **5.2 h** for symbolic arithmetic, **9.9 h** for nested arithmetic, and **17.1 h** for arbitrary precision. Play time varies with purchase order, roll rewards, and cadence.
 
 Older saves keep their research and roll history. They receive an EP rebate for the difference between the old prices and new prices.
 

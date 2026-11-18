@@ -87,7 +87,7 @@ export function Statistics({ game }: { game: Game }) {
       <section className="panel stats-panel">
         <header className="section-title"><div><FlaskConical size={17} /><h2>Research milestones</h2></div></header>
         <div className="milestone-list"><div><strong>{eras[researchEra(game.purchases)]}</strong><span>{completed} / {path.size} Classical route studies</span></div>
-          {milestones.map(({ id }) => <div key={id}>{owns(game.purchases, id) ? <Check size={15} className="earned" /> : <LockKeyhole size={15} />}
+          {milestones.map(id => <div key={id}>{owns(game.purchases, id) ? <Check size={15} className="earned" /> : <LockKeyhole size={15} />}
             <span>{researchById.get(id)?.title}</span></div>)}
         </div>
       </section>

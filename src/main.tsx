@@ -68,7 +68,7 @@ function App() {
       <div className="wallet" aria-label={'EP balance ' + integerText(game.balance)}><Zap size={17} fill="currentColor" /><strong>{integerText(game.balance)}</strong><span>EP</span></div>
     </div></header>
     <main className={page === 'Research' ? 'research-main' : undefined}>
-      {lab && <div className="notice">Developer lab · Reduced research costs and roll gates · Isolated save</div>}
+      {lab && <div className="notice">Developer lab · Reduced research costs and badge requirements · Isolated save</div>}
       {warning && <div className="notice" role="alert">{warning}</div>}
       {page === 'Play' && <Play game={game} rolling={rolling} onRoll={clickRoll} onResearch={id => open('Research', id)} />}
       {page === 'Research' && <ResearchView game={game} initialFocus={researchFocus} onBuy={id => commit(purchase(current.current, id))} onRefund={id => commit(refund(current.current, id))} />}

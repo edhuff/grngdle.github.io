@@ -5,6 +5,7 @@ import { rewards } from '../src/game/economy'
 import { manualRoll, newGame, progress, purchase, refund } from '../src/game/game'
 import { CLASSICAL_MAX, DISTRIBUTION_TOTAL, EXPANDED_MAX, VAST_MAX, generate, generatorBands, seededWords, uniformBelow } from '../src/game/generator'
 import { depth, fraction, integer, magnitude, notation, rarityOf } from '../src/game/math'
+import { milestones } from '../src/game/progression'
 import { classicalRoute, effectsOf, meets, rankCost, research, researchById, researchStatus, validateResearch, type ResearchNode } from '../src/game/research'
 import { exportSave, importSave } from '../src/game/save'
 
@@ -93,7 +94,7 @@ test('research purchases charge once per rank and preserve earned EP', () => {
   assert.equal(game.lifetime, testState.lifetime)
 })
 
-test('research validates cycles, missing nodes, AND and OR prerequisites, and roll gates', () => {
+test('research validates cycles, missing nodes, AND and OR prerequisites', () => {
   validateResearch(research)
   const [root] = research
   const missing: ResearchNode = { ...root, requires: { kind: 'node', id: 'fake' } }
@@ -101,15 +102,30 @@ test('research validates cycles, missing nodes, AND and OR prerequisites, and ro
   assert.throws(() => validateResearch([{ ...root, requires: { kind: 'node', id: root.id } }]), /Cyclic/)
   assert.throws(() => validateResearch([root, root]), /Duplicate/)
   const bounds = researchById.get('bounds')!
-  assert(!meets(bounds.requires, { purchases: { measurement: 1 }, rolls: 0, families: 0 }))
-  assert(meets(bounds.requires, { purchases: { measurement: 1, radix: 1 }, rolls: 0, families: 0 }))
-  assert(meets(bounds.requires, { purchases: { measurement: 1, squares: 1 }, rolls: 0, families: 0 }))
-  const expansion = researchById.get('expansion')!
+  assert(!meets(bounds.requires, { purchases: { measurement: 1 }, families: 0 }))
+  assert(meets(bounds.requires, { purchases: { measurement: 1, radix: 1 }, families: 0 }))
+  assert(meets(bounds.requires, { purchases: { measurement: 1, squares: 1 }, families: 0 }))
+})
+
+test('milestones unlock at their EP cost and prerequisites regardless of roll count', () => {
   const route = classicalRoute()
   assert(route.size >= 30)
-  const purchases = Object.fromEntries([...route].filter(id => id !== 'expansion').map(id => [id, 1]))
-  assert.equal(researchStatus(expansion, { purchases, rolls: 899, families: 8 }, 50_000n), 'locked')
-  assert.equal(researchStatus(expansion, { purchases, rolls: 900, families: 8 }, 50_000n), 'available')
+  let state = {
+    ...newGame(), rolls: 1,
+    purchases: Object.fromEntries([...route].filter(id => id !== 'expansion').map(id => [id, 1])),
+    discoveries: { parity: 1, divisibility: 1, digits: 1, prime: 1, sequence: 1 },
+  }
+  for (const id of milestones) {
+    const item = researchById.get(id)!
+    const price = rankCost(item, 0)
+    assert.equal(researchStatus(item, progress(newGame()), price), 'locked')
+    assert.equal(researchStatus(item, progress(state), price - 1n), 'unaffordable')
+    const purchased = purchase({ ...state, balance: price }, id)
+    assert.equal(purchased.purchases[id], 1)
+    assert.equal(purchased.balance, 0n)
+    assert.equal(purchased.rolls, 1)
+    state = { ...state, purchases: purchased.purchases }
+  }
 })
 
 test('specializations are exclusive and refundable without revoking permanent unlocks', () => {

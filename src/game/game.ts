@@ -33,7 +33,7 @@ export function newGame(lab = false): Game {
 }
 
 export function progress(game: Game) {
-  return { purchases: game.purchases, rolls: game.rolls, families: Object.keys(game.discoveries).length }
+  return { purchases: game.purchases, families: Object.keys(game.discoveries).length }
 }
 
 const recordLimit = 12

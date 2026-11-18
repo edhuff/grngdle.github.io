@@ -2,7 +2,15 @@
 
 A browser-based, manual RNG collection game about the mathematics of large numbers. The prototype starts with a uniform roll from **0 through 1,000,000**. Find mathematical attributes, earn Expression Points (EP), and spend them on research. The opening contains **44 studies across nine disciplines**, with a 37-study dependency network around the first expansion.
 
-## Run locally
+## Play on GitHub Pages
+
+Open [gRNGdle](https://edhuff.github.io/grngdle.github.io/). GitHub Pages serves the static site from the root of `main`.
+
+Before pushing changes to the site, run `npm run build:pages` and commit the generated root `index.html` and `pages-assets/` folder along with the source changes. Edit the HTML template in `src/index.html`. GitHub Pages publishes the committed site after the push.
+
+To carry over local progress, export your save in Settings on the local site and import it on GitHub Pages. Browser saves are scoped to the site origin.
+
+## Develop locally
 
 Use Node.js 22 or newer.
 
@@ -13,7 +21,7 @@ npm run dev
 
 Open the address Vite prints, usually `http://localhost:5173`. Use **Roll** for one draw and **Research** to spend EP. On the map, drag to pan, scroll to zoom, or use the zoom controls and discipline picker. Collection stores notable results, and Settings manages animations and local save import, export, and reset.
 
-`npm run build` produces a static site in `dist/`. `npm run preview` serves it locally. The build uses relative asset paths for static hosting, including GitHub Pages.
+`npm run build` produces a static site in `dist/`. `npm run preview` serves it locally. Relative asset paths work at the GitHub Pages project URL.
 
 ## Playable progression
 

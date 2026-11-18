@@ -4,7 +4,7 @@ import { badgeReference, badgeRule, type Badge } from '../game/attributes'
 import { integerText, oddsText, rarityOf, type Fraction } from '../game/math'
 
 export function Mark() {
-  return <img className="brand-mark" src={import.meta.env.BASE_URL + 'mark.svg'} alt="" width="38" height="38" />
+  return <img className="brand-mark" src={import.meta.env.BASE_URL + 'pages-assets/mark.svg'} alt="" width="38" height="38" />
 }
 
 export function RarityLabel({ probability }: { probability: Fraction }) {

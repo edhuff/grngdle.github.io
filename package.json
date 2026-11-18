@@ -10,7 +10,8 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "tsx --test tests/*.test.ts",
     "balance": "tsx scripts/balance.ts",
-    "test:browser": "tsx tests/browser.mjs"
+    "test:browser": "tsx tests/browser.mjs",
+    "build:pages": "npm run build && node scripts/prepare-pages.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

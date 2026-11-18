@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BarChart3, BookOpen, CircleCheck, Dices, GitBranch, Settings2, Zap } from 'lucide-react'
+import { BarChart3, BookOpen, Dices, GitBranch, Settings2, Zap } from 'lucide-react'
 import { manualRoll, newGame, purchase, refund, type Game } from './game/game'
-import { GENERATOR_VERSION } from './game/generator'
 import { integerText } from './game/math'
 import { loadLocal, saveLocal } from './game/save'
 import { Play } from './ui/Play'
@@ -27,6 +26,7 @@ function App() {
   const [game, setGame] = useState(loaded.game)
   const current = useRef(game)
   const [page, setPage] = useState<Page>('Play')
+  const [researchFocus, setResearchFocus] = useState<string>()
   const [warning, setWarning] = useState(loaded.warning)
   const [rolling, setRolling] = useState(false)
   const timeout = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -54,27 +54,27 @@ function App() {
     }
   }
 
-  function open(page: Page) {
+  function open(page: Page, focus?: string) {
     setPage(page)
+    setResearchFocus(focus)
     window.scrollTo({ top: 0 })
   }
 
-  return <div className={'app' + (game.settings.reducedEffects ? ' reduced-effects' : '')}>
+  return <div className={'app' + (page === 'Research' ? ' research-app' : '') + (game.settings.reducedEffects ? ' reduced-effects' : '')}>
     <header className="app-header"><div className="header-inner">
-      <button className="brand" onClick={() => open('Play')} aria-label="gRNGdle home"><Mark /><span><strong>gRNGdle</strong><small>THE NUMBER LAB</small></span></button>
+      <button className="brand" onClick={() => open('Play')} aria-label="gRNGdle home"><Mark /><strong>gRNGdle</strong></button>
       <nav aria-label="Main navigation">{pages.map(item => <button key={item.name} aria-current={page === item.name ? 'page' : undefined} onClick={() => open(item.name)}>
         <item.icon size={17} /><span>{item.name}</span></button>)}</nav>
       <div className="wallet" aria-label={'EP balance ' + integerText(game.balance)}><Zap size={17} fill="currentColor" /><strong>{integerText(game.balance)}</strong><span>EP</span></div>
     </div></header>
-    <main>
+    <main className={page === 'Research' ? 'research-main' : undefined}>
       {lab && <div className="notice">Developer lab · Reduced research costs and roll gates · Isolated save</div>}
       {warning && <div className="notice" role="alert">{warning}</div>}
-      {page === 'Play' && <Play game={game} rolling={rolling} onRoll={clickRoll} onResearch={() => open('Research')} onCollection={() => open('Collection')} />}
-      {page === 'Research' && <ResearchView game={game} onBuy={id => commit(purchase(current.current, id))} onRefund={id => commit(refund(current.current, id))} />}
+      {page === 'Play' && <Play game={game} rolling={rolling} onRoll={clickRoll} onResearch={id => open('Research', id)} />}
+      {page === 'Research' && <ResearchView game={game} initialFocus={researchFocus} onBuy={id => commit(purchase(current.current, id))} onRefund={id => commit(refund(current.current, id))} />}
       {page === 'Collection' && <Collection game={game} />}
       {page === 'Statistics' && <Statistics game={game} />}
       {page === 'Settings' && <SettingsView game={game} onSettings={settings => commit({ ...current.current, settings })} onImport={commit} onReset={() => commit(newGame(lab))} />}
-      <footer className="app-footer"><span><CircleCheck size={13} /> {warning ? 'Save needs attention' : 'Local save enabled'}</span><span>Generator v{GENERATOR_VERSION}</span></footer>
     </main>
   </div>
 }

@@ -16,7 +16,7 @@ export type Roll = {
 }
 export type Settings = { animations: boolean; reducedEffects: boolean; showBadgeOdds: boolean }
 export type Game = {
-  schema: 2; lab: boolean; balance: bigint; lifetime: bigint; rolls: number
+  schema: 3; lab: boolean; balance: bigint; lifetime: bigint; rolls: number
   purchases: Purchases; discoveries: Partial<Record<BadgeFamily, number>>
   distribution: Record<Rarity, number>
   recent: Roll[]; rarest: Roll[]; highest: Roll[]; largest: Roll[]
@@ -25,7 +25,7 @@ export type Game = {
 
 export function newGame(lab = false): Game {
   return {
-    schema: 2, lab, balance: 0n, lifetime: 0n, rolls: 0, purchases: {}, discoveries: {},
+    schema: 3, lab, balance: 0n, lifetime: 0n, rolls: 0, purchases: {}, discoveries: {},
     distribution: Object.fromEntries(rarities.map(tier => [tier.name, 0])) as Game['distribution'],
     recent: [], rarest: [], highest: [], largest: [],
     settings: { animations: true, reducedEffects: false, showBadgeOdds: false },

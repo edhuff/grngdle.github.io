@@ -5,7 +5,7 @@ import { rewards } from '../src/game/economy'
 import { manualRoll, newGame, progress, purchase, refund } from '../src/game/game'
 import { CLASSICAL_MAX, DISTRIBUTION_TOTAL, EXPANDED_MAX, VAST_MAX, generate, generatorBands, seededWords, uniformBelow } from '../src/game/generator'
 import { depth, fraction, integer, magnitude, notation, rarityOf } from '../src/game/math'
-import { classicalRoute, effectsOf, meets, research, researchById, researchStatus, validateResearch, type ResearchNode } from '../src/game/research'
+import { classicalRoute, effectsOf, meets, rankCost, research, researchById, researchStatus, validateResearch, type ResearchNode } from '../src/game/research'
 import { exportSave, importSave } from '../src/game/save'
 
 test('classical generator includes both endpoints and rejects biased overflow draws', () => {
@@ -85,11 +85,11 @@ test('research purchases charge once per rank and preserve earned EP', () => {
   const testState = { ...empty, balance: 2n ** 100n, lifetime: 2n ** 100n }
   assert.equal(purchase(testState, 'compound'), testState)
   let game = purchase(testState, 'yield')
-  assert.equal(game.balance, testState.balance - 30n)
+  assert.equal(game.balance, testState.balance - 6n)
   assert.equal(purchase(game, 'yield'), game)
   game = purchase(purchase(game, 'compound'), 'compound')
   assert.equal(game.purchases.compound, 2)
-  assert.equal(game.balance, testState.balance - 30n - 210n - 420n)
+  assert.equal(game.balance, testState.balance - 6n - 42n - 84n)
   assert.equal(game.lifetime, testState.lifetime)
 })
 
@@ -108,8 +108,8 @@ test('research validates cycles, missing nodes, AND and OR prerequisites, and ro
   const route = classicalRoute()
   assert(route.size >= 30)
   const purchases = Object.fromEntries([...route].filter(id => id !== 'expansion').map(id => [id, 1]))
-  assert.equal(researchStatus(expansion, { purchases, rolls: 4799, families: 8 }, 50_000n), 'locked')
-  assert.equal(researchStatus(expansion, { purchases, rolls: 4800, families: 8 }, 50_000n), 'available')
+  assert.equal(researchStatus(expansion, { purchases, rolls: 899, families: 8 }, 50_000n), 'locked')
+  assert.equal(researchStatus(expansion, { purchases, rolls: 900, families: 8 }, 50_000n), 'available')
 })
 
 test('specializations are exclusive and refundable without revoking permanent unlocks', () => {
@@ -120,7 +120,7 @@ test('specializations are exclusive and refundable without revoking permanent un
     discoveries: { parity: 41, divisibility: 23, digits: 19, prime: 7, sequence: 2, mirror: 1 },
   }
   const specialized = purchase(state, 'magnitude-focus')
-  assert.equal(specialized.balance, 41_000n)
+  assert.equal(specialized.balance, 48_200n)
   assert.equal(effectsOf(specialized.purchases).generator.specialization, 'magnitude')
   assert.equal(purchase(specialized, 'efficiency-focus'), specialized)
   const returned = refund(specialized, 'magnitude-focus')
@@ -171,18 +171,39 @@ test('versioned saves round-trip records, validate purchases, and isolate develo
   assert.equal(game.purchases.yield, 1)
   const saved = exportSave(game)
   assert.deepEqual(importSave(saved), game)
-  const legacy = JSON.parse(saved)
-  legacy.schema = 1
-  delete legacy.settings.showBadgeOdds
-  assert.deepEqual(importSave(JSON.stringify(legacy)), game)
   assert.throws(() => importSave(saved, true), /different game mode/)
   assert.throws(() => importSave('{'), /JSON/)
-  assert.throws(() => importSave(saved.replace('"schema":2', '"schema":55')), /unsupported/)
+  assert.throws(() => importSave(saved.replace('"schema":3', '"schema":55')), /unsupported/)
   assert.throws(() => importSave(saved.replace('"purchases":{', '"purchases":{"__proto__":1,')), /Malformed/)
   assert.throws(() => importSave(saved.replace(/"balance":"\d+"/, '"balance":"0"')), /Research spending/)
   const altered = JSON.parse(saved)
   altered.recent[0].probability = { numerator: '2', denominator: '1' }
   assert.throws(() => importSave(JSON.stringify(altered)), /Malformed/)
+})
+
+test('legacy saves keep research and history and receive a rebate on old prices', () => {
+  const word = seededWords(22)
+  let game = newGame()
+  for (let index = 0; index < 360; index++) game = manualRoll(game, word)
+  game = purchase(purchase(purchase(game, 'yield'), 'compound'), 'compound')
+  assert.deepEqual(game.purchases, { yield: 1, compound: 2 })
+
+  const oldYield = researchById.get('yield')!
+  const oldCompound = researchById.get('compound')!
+  const oldSpending = rankCost(oldYield, 0, false, oldYield.legacyCost) +
+    rankCost(oldCompound, 0, false, oldCompound.legacyCost) + rankCost(oldCompound, 1, false, oldCompound.legacyCost)
+  assert.equal(oldSpending, 660n)
+  const legacy = JSON.parse(exportSave(game))
+  legacy.schema = 2
+  legacy.balance = String(game.lifetime - oldSpending)
+  assert.deepEqual(importSave(JSON.stringify(legacy)), game)
+  assert.equal(game.balance - BigInt(legacy.balance), 528n)
+
+  legacy.schema = 1
+  delete legacy.settings.showBadgeOdds
+  assert.deepEqual(importSave(JSON.stringify(legacy)), game)
+  legacy.balance = '1'
+  assert.throws(() => importSave(JSON.stringify(legacy)), /Research spending/)
 })
 
 test('lab progression can reach symbolic rolls and still credits EP strictly from individual actions', () => {

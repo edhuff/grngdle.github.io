@@ -83,8 +83,8 @@ export function exportSave(game: Game) {
 }
 
 function migrate(raw: Record<string, unknown>) {
-  if (raw.schema === 1) return { ...raw, schema: 2, settings: { ...object(raw.settings), showBadgeOdds: false } }
-  if (raw.schema !== 2) return invalid('This save version is unsupported.')
+  if (raw.schema === 1) return { ...raw, settings: { ...object(raw.settings), showBadgeOdds: false } }
+  if (raw.schema !== 2 && raw.schema !== 3) return invalid('This save version is unsupported.')
   return raw
 }
 
@@ -96,20 +96,25 @@ export function importSave(text: string, lab = false): Game {
   if (raw.lab !== lab) return invalid('This save belongs to a different game mode.')
   const rolls = count(raw.rolls)
   const lifetime = decimal(raw.lifetime)
-  const balance = decimal(raw.balance)
+  const savedBalance = decimal(raw.balance)
+  const legacyPricing = raw.schema === 1 || raw.schema === 2
   if (rolls === 0 ? lifetime !== 0n : lifetime < BigInt(rolls)) return invalid()
   const purchases: Game['purchases'] = {}
-  let spent = 0n
+  let savedSpent = 0n
+  let currentSpent = 0n
   let specializations = 0
   for (const [id, value] of Object.entries(object(raw.purchases))) {
     const item = researchById.get(id)
     if (!item) return invalid()
     const rank = count(value, 1, item.max ?? 1)
     purchases[id] = rank
-    for (let level = 0; level < rank; level++) spent += rankCost(item, level, lab)
+    for (let level = 0; level < rank; level++) {
+      savedSpent += rankCost(item, level, lab, legacyPricing ? item.legacyCost : item.cost)
+      currentSpent += rankCost(item, level, lab)
+    }
     if (item.refundable) specializations++
   }
-  if (specializations > 1 || balance + spent !== lifetime) return invalid('Research spending does not match lifetime EP.')
+  if (specializations > 1 || savedBalance + savedSpent !== lifetime) return invalid('Research spending does not match lifetime EP.')
   const discoveries: Game['discoveries'] = {}
   for (const [key, value] of Object.entries(object(raw.discoveries))) {
     if (!families.has(key as BadgeFamily)) return invalid()
@@ -141,7 +146,7 @@ export function importSave(text: string, lab = false): Game {
   if (largest.some(roll => magnitude(roll.expression) === null)) return invalid()
   const settings = object(raw.settings)
   const game: Game = {
-    schema: 2, lab, rolls, lifetime, balance, purchases, discoveries, distribution, recent, rarest, highest, largest,
+    schema: 3, lab, rolls, lifetime, balance: lifetime - currentSpent, purchases, discoveries, distribution, recent, rarest, highest, largest,
     settings: { animations: bool(settings.animations), reducedEffects: bool(settings.reducedEffects), showBadgeOdds: bool(settings.showBadgeOdds) },
   }
   if (Object.keys(purchases).some(id => !meets(researchById.get(id)?.requires, progress(game), lab))) {

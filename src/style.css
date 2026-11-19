@@ -352,6 +352,8 @@ nav button[aria-current]::after {
 .inspector-close { position: absolute; top: 6px; right: 6px; color: var(--muted); }
 .discipline-label { display: block; padding-right: 30px; color: var(--accent); font-size: 11px; font-weight: 650; }
 .node-detail h2 { margin: 6px 0 8px; font-size: 21px; letter-spacing: -.035em; }
+.study-notes { display: grid; gap: 6px; margin-top: 8px; }
+.node-detail .study-notes p { color: var(--subtle); font-size: 12px; }
 .research-state { display: inline-block; margin: 10px 0; color: var(--muted); font: 650 11px var(--mono); }
 .research-state.state-complete, .research-state.state-available { color: var(--green); }
 .node-detail .primary-button, .node-detail .secondary-button { width: 100%; margin-top: 9px; }

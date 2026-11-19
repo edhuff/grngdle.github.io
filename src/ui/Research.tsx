@@ -6,6 +6,8 @@ import { integerText } from '../game/math'
 import { milestones } from '../game/progression'
 import { dependencies, disciplines, eras, familyGoal, meets, owns, purchaseCost, research, researchById, researchEra, researchStatus, revealedResearch, startingStudy, type Requirement } from '../game/research'
 import { atlases, nodeHeight, nodeWidth, overlaps, type Point } from './research-layout'
+import { useResearchCamera, type Camera } from './research-camera'
+import { studyNotes } from './study-notes'
 
 const states = {
   complete: 'Researched', locked: 'Prerequisites unmet', exclusive: 'Another doctrine is active', unsupported: 'Engine support pending',
@@ -14,7 +16,6 @@ const states = {
 const eraGate = ['expansion', 'arithmetic', 'power-towers', 'hyperoperations', 'conway-chains', 'ordinal-hierarchy', 'extreme-googology']
 const milestoneIds = new Set<string>(milestones)
 const moves: Record<string, [number, number]> = { ArrowLeft: [55, 0], ArrowRight: [-55, 0], ArrowUp: [0, 55], ArrowDown: [0, -55] }
-type Camera = Point & { scale: number }
 
 function Requirements({ condition, game, revealed, onSelect }: {
   condition: Requirement; game: Game; revealed: ReadonlySet<string>; onSelect: (id: string) => void
@@ -52,7 +53,7 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
   const [confirmation, setConfirmation] = useState<'buy' | 'refund'>()
-  const [view, setView] = useState<Camera>({ x: 0, y: 0, scale: 0.85 })
+  const { view, move, stopZoom, zoom } = useResearchCamera(game.settings.reducedEffects)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [dragging, setDragging] = useState(false)
   const viewport = useRef<HTMLDivElement>(null)
@@ -77,12 +78,17 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
     })
   }, [graph, regionStudies])
   const selected = selection && revealed.has(selection) ? researchById.get(selection) : undefined
+  const notes = useMemo(() => selected ? studyNotes(selected, game.purchases) : [], [selected, game.purchases])
   const rank = selected ? owns(game.purchases, selected.id) : 0
   const status = selected ? researchStatus(selected, current, game.balance, game.lab) : undefined
   const price = selected ? purchaseCost(selected, game.purchases, game.lab) : 0n
   const completed = graph.items.filter(item => owns(game.purchases, item.id)).length
   const visible = { left: (-view.x - 120) / view.scale, top: (-view.y - 100) / view.scale,
     right: (size.width - view.x + 120) / view.scale, bottom: (size.height - view.y + 100) / view.scale }
+  const selectedPoint = selected ? graph.positions.get(selected.id) : undefined
+  const selectedOnScreen = selectedPoint && selectedPoint.x * view.scale + view.x >= 0 &&
+    selectedPoint.x * view.scale + view.x <= size.width && selectedPoint.y * view.scale + view.y >= 0 &&
+    selectedPoint.y * view.scale + view.y <= size.height
   const term = query.trim().toLowerCase()
 
   function matches(item: typeof research[number]) {
@@ -95,30 +101,27 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
   const searchResults = term || filter !== 'all'
     ? research.filter(matches).sort((a, b) => Number(b.region === region) - Number(a.region === region)).slice(0, 45) : []
 
-  function zoom(factor: number, x?: number, y?: number) {
+  function zoomFromCenter(factor: number) {
     const canvas = viewport.current
-    if (!canvas) return
-    const localX = x ?? canvas.clientWidth / 2
-    const localY = y ?? canvas.clientHeight / 2
-    setView(previous => {
-      const scale = Math.max(0.08, Math.min(1.7, previous.scale * factor))
-      return { scale, x: localX - (localX - previous.x) * scale / previous.scale, y: localY - (localY - previous.y) * scale / previous.scale }
-    })
+    if (canvas && !drag.current) zoom(factor, { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 })
   }
 
   function show(point: Point, scale: number, details = false) {
     const canvas = viewport.current
-    if (canvas) setView(centered(canvas.clientWidth, canvas.clientHeight, point, scale, details))
+    if (canvas) move(centered(canvas.clientWidth, canvas.clientHeight, point, scale, details))
   }
 
   function select(id: string) {
-    const item = researchById.get(id)
-    if (!item || !revealed.has(id)) return
-    setGlobal(false)
-    setRegion(item.region!)
+    if (!revealed.has(id)) return
     setSelection(id)
     setConfirmation(undefined)
-    show(atlases[item.region!].positions.get(id)!, 1, true)
+  }
+
+  function showStudyOnMap(id: string) {
+    const item = researchById.get(id)!
+    setGlobal(false)
+    setRegion(item.region!)
+    show(atlases[item.region!].positions.get(id)!, view.scale, true)
   }
 
   function showRegion(index: number) {
@@ -149,7 +152,7 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
     const header = canvas.clientWidth <= 720 ? 124 : 76
     const height = canvas.clientHeight - header - 64
     const scale = Math.max(0.08, Math.min(1, width / (right - left), height / (bottom - top)))
-    setView({
+    move({
       x: canvas.clientWidth / 2 - (left + right) * scale / 2,
       y: header + height / 2 - (top + bottom) * scale / 2,
       scale,
@@ -159,30 +162,39 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
   useLayoutEffect(() => {
     const canvas = viewport.current!
     setSize({ width: canvas.clientWidth, height: canvas.clientHeight })
-    if (focus) select(focus)
+    if (focus) show(graph.positions.get(focus)!, 0.77, true)
     else showRegion(region)
-    function wheel(event: WheelEvent) {
-      event.preventDefault()
-      const rect = canvas.getBoundingClientRect()
-      zoom(Math.exp(-Math.max(-160, Math.min(160, event.deltaY)) / 390), event.clientX - rect.left, event.clientY - rect.top)
-    }
     const observer = new ResizeObserver(([entry]) => setSize({ width: entry.contentRect.width, height: entry.contentRect.height }))
     observer.observe(canvas)
-    canvas.addEventListener('wheel', wheel, { passive: false })
-    return () => { observer.disconnect(); canvas.removeEventListener('wheel', wheel) }
+    return () => observer.disconnect()
   }, [])
+
+  useLayoutEffect(() => {
+    const canvas = viewport.current!
+    if (global) return
+    function wheel(event: WheelEvent) {
+      event.preventDefault()
+      if (drag.current) return
+      const rect = canvas.getBoundingClientRect()
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? rect.height : 1
+      const delta = Math.max(-160, Math.min(160, event.deltaY * unit))
+      zoom(Math.exp(-delta / 390), { x: event.clientX - rect.left, y: event.clientY - rect.top })
+    }
+    canvas.addEventListener('wheel', wheel, { passive: false })
+    return () => canvas.removeEventListener('wheel', wheel)
+  }, [global, zoom])
 
   function startPan(event: PointerEvent<HTMLDivElement>) {
     if (event.button !== 0 || drag.current || (event.target as Element).closest('button') || global) return
     event.currentTarget.setPointerCapture(event.pointerId)
-    drag.current = { pointer: event.pointerId, origin: { x: event.clientX, y: event.clientY }, camera: view }
+    drag.current = { pointer: event.pointerId, origin: { x: event.clientX, y: event.clientY }, camera: stopZoom() }
     setDragging(true)
   }
 
   function movePan(event: PointerEvent<HTMLDivElement>) {
     const start = drag.current
     if (start?.pointer !== event.pointerId) return
-    setView(previous => ({ ...previous, x: start.camera.x + event.clientX - start.origin.x, y: start.camera.y + event.clientY - start.origin.y }))
+    move(previous => ({ ...previous, x: start.camera.x + event.clientX - start.origin.x, y: start.camera.y + event.clientY - start.origin.y }))
   }
 
   function stopPan(event: PointerEvent<HTMLDivElement>) {
@@ -194,7 +206,7 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
   function closeDetails() {
     setSelection(undefined)
     setConfirmation(undefined)
-    viewport.current?.focus()
+    if (!global) viewport.current?.focus({ preventScroll: true })
   }
 
   return <section className="research-map" aria-label="Research graph" onKeyDown={event => {
@@ -212,9 +224,12 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
         const offset = moves[event.key]
         if (offset) {
           event.preventDefault()
-          setView(previous => ({ ...previous, x: previous.x + offset[0], y: previous.y + offset[1] }))
+          move(previous => ({ ...previous, x: previous.x + offset[0], y: previous.y + offset[1] }))
         }
-        if (event.key === '+' || event.key === '-') zoom(event.key === '+' ? 1.2 : 1 / 1.2)
+        if (event.key === '+' || event.key === '-') {
+          event.preventDefault()
+          zoomFromCenter(event.key === '+' ? 1.2 : 1 / 1.2)
+        }
       }}>
       {!global && <div className={'map-world' + (view.scale <= 0.37 ? ' zoomed-out' : '')}
         style={{ width: graph.width, height: graph.height, transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
@@ -276,10 +291,10 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
       <div className="atlas-tools">
         <button className="secondary-button" aria-pressed={global} onClick={() => {
           if (global) showRegion(region)
-          else { setGlobal(true); setSelection(undefined) }
+          else { stopZoom(); setGlobal(true); setSelection(undefined); setConfirmation(undefined) }
         }}>{global ? 'Region' : 'Eras'}</button>
-        <select aria-label="Jump to research" value="" onChange={event => select(event.target.value)}>
-          <option value="" disabled>Jump to research</option>
+        <select aria-label="Inspect research" value="" onChange={event => select(event.target.value)}>
+          <option value="" disabled>Inspect research</option>
           {[startingStudy, ...milestones, 'magnitude-focus', 'rarity-focus', 'efficiency-focus'].filter(id => revealed.has(id)).map(id =>
             <option key={id} value={id}>{researchById.get(id)?.title}</option>)}
         </select>
@@ -301,14 +316,18 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
       </div>}
     </div>
 
-    {!global && selected && status && <aside className="node-detail" aria-label="Research details" key={selected.id}>
+    {selected && status && <aside className="node-detail" aria-label="Research details" key={selected.id}>
       <button className="inspector-close" aria-label="Close research details" onClick={closeDetails}><X size={19} /></button>
       <span className="discipline-label" style={{ color: disciplines[selected.discipline].color }}>{disciplines[selected.discipline].name} · {selected.type}</span>
       <h2>{selected.title}</h2>
       <p>{selected.description}</p>
+      {notes.length > 0 && <div className="study-notes">{notes.map(note => <p key={note}>{note}</p>)}</div>}
       <span className={'research-state state-' + status}>{status === 'complete' && selected.max ? 'Mastered' : states[status]}{selected.max ? ' · Rank ' + rank + ' / ' + selected.max : ''}</span>
       {selected.unavailable && <p>{selected.unavailable}</p>}
       {selected.doctrine && status === 'exclusive' && <p>Refund your active doctrine to choose this path.</p>}
+      {(global || !selectedOnScreen) && <button className="secondary-button" onClick={() => showStudyOnMap(selected.id)}>
+        <Crosshair size={15} /> Show on map
+      </button>}
       {selected.type === 'Gateway' && rank > 0 && selected.region! < unlocked && <button className="secondary-button" onClick={() => showRegion(selected.region! + 1)}>
         Open {eras[selected.region! + 1]}<ChevronRight size={15} />
       </button>}
@@ -334,9 +353,9 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
     </aside>}
 
     {!global && <div className="map-controls">
-      <button title="Zoom out" aria-label="Zoom out" onClick={() => zoom(1 / 1.22)}><Minus size={17} /></button>
+      <button title="Zoom out" aria-label="Zoom out" onClick={() => zoomFromCenter(1 / 1.22)}><Minus size={17} /></button>
       <span aria-label="Map zoom">{Math.round(view.scale * 100)}%</span>
-      <button title="Zoom in" aria-label="Zoom in" onClick={() => zoom(1.22)}><Plus size={17} /></button>
+      <button title="Zoom in" aria-label="Zoom in" onClick={() => zoomFromCenter(1.22)}><Plus size={17} /></button>
       <button title="Fit graph" aria-label="Fit graph" onClick={fit}><Crosshair size={16} /></button>
     </div>}
   </section>

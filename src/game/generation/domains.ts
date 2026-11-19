@@ -96,24 +96,32 @@ export function digitStrings(maxLength: number, zeroWeight: number): Domain {
   }
 }
 
-/** Assign sixteen base tickets to every value and optional extras by final digit.
- * The base and bonus tickets may denote the same integer, so report their sum. */
+export const baseTerminalTickets = 16n
+
+export function terminalTicketPool(high: bigint, extras: readonly number[] = []) {
+  const endings = Array.from({ length: 10 }, (_, index) => {
+    const digit = BigInt(index)
+    return { digit, extra: BigInt(extras[index] ?? 0), count: high >= digit ? (high - digit) / 10n + 1n : 0n }
+  })
+  const tickets = endings.reduce((sum, item) => sum + (baseTerminalTickets + item.extra) * item.count, 0n)
+  return { endings, tickets }
+}
+
+/** The base and bonus tickets may denote the same integer, so report their sum. */
 export function terminalWeighted(high: bigint, extras: readonly number[]): Domain {
-  const base = 16n
   const outcomes = high + 1n
-  const counts = extras.map((extra, digit) => ({ digit: BigInt(digit), weight: BigInt(extra), count: high >= BigInt(digit) ? (high - BigInt(digit)) / 10n + 1n : 0n }))
-  const tickets = base * outcomes + counts.reduce((sum, item) => sum + item.weight * item.count, 0n)
+  const { endings, tickets } = terminalTicketPool(high, extras)
   function odds(value: Rational) {
     if (value.denominator !== 1n || value.numerator < 0n || value.numerator > high) return fraction(0n, 1n)
-    return fraction(base + counts[Number(value.numerator % 10n)].weight, tickets)
+    return fraction(baseTerminalTickets + endings[Number(value.numerator % 10n)].extra, tickets)
   }
   return {
     tickets, outcomes,
     at(ticket) {
-      if (ticket < base * outcomes) return integer(ticket % outcomes)
-      ticket -= base * outcomes
-      for (const item of counts) {
-        const width = item.weight * item.count
+      if (ticket < baseTerminalTickets * outcomes) return integer(ticket % outcomes)
+      ticket -= baseTerminalTickets * outcomes
+      for (const item of endings) {
+        const width = item.extra * item.count
         if (ticket < width) return integer(item.digit + 10n * (ticket % item.count))
         ticket -= width
       }

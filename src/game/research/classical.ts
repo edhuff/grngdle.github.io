@@ -88,7 +88,7 @@ export const classicalStudies = [
   ...cluster(0, classicalClusters[3], 4, [
     ['probability-notebook', 'Probability Notebook', 50, 'odds', 'Inspect reference frequencies for the badges on a retained roll.', feature('reference-odds'), foundation],
     ['normalized-weights', 'Normalized Weights', 138, 'distribution', 'Inspect the historical generator pool and exact weight of each band.', feature('pool-breakdown'), foundation],
-    ['decimal-zero-luck', 'Terminal Zero Sampling', 195, 'normalized-weights', 'Add two classical tickets to each integer ending in 0. Every integer starts with sixteen.', luck(0, 2)],
+    ['decimal-zero-luck', 'Terminal Zero Sampling', 195, 'normalized-weights', 'Add two draw tickets to each starting-range number ending in 0.', luck(0, 2)],
     ['decimal-three-luck', 'Terminal Three Sampling', 218, 'normalized-weights', 'Add three classical tickets to each integer ending in 3.', luck(3, 3)],
     ['decimal-seven-luck', 'Terminal Seven Sampling', 245, 'normalized-weights', 'Add three classical tickets to each integer ending in 7.', luck(7, 3)],
     ['zero-weight-calibration', 'Zero Weight Calibration', 500, 'decimal-zero-luck', 'Add two more classical tickets per rank to each number ending in 0.', luck(0, 2), { max: 3 }],

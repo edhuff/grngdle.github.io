@@ -70,8 +70,8 @@ const original: ResearchNode[] = [
   study(4, 'odds', 'Sample Space', 50n, '+1 EP for every prime badge.', [badgeEP('prime')], node('yield')),
   study(4, 'distribution', 'Distribution Survey', 160n, '+1 EP for palindromes.', [badgeEP('mirror')], node('odds')),
   study(4, 'variance', 'Variance Analysis', 420n, '+1 EP for rare sequence landmarks.', [badgeEP('landmarks')], node('distribution')),
-  study(4, 'tail-model', 'Tail Model', 880n, '+1 percentage point for each unlocked nonclassical integer band.', [{ kind: 'anomaly', amount: 1 }], node('variance')),
-  study(4, 'anomaly', 'Anomaly Weighting', 21_000n, 'Shift 1 percentage point per rank to each unlocked nonclassical integer band.', [{ kind: 'anomaly', amount: 1 }], node('expansion'), { max: 5, era: 1 }),
+  study(4, 'tail-model', 'Tail Model', 880n, 'Move 1 point of draw weight from the starting range to each unlocked larger-integer range.', [{ kind: 'anomaly', amount: 1 }], node('variance')),
+  study(4, 'anomaly', 'Anomaly Weighting', 21_000n, 'Each rank moves 1 point of draw weight from the starting range to each unlocked larger-integer range.', [{ kind: 'anomaly', amount: 1 }], node('expansion'), { max: 5, era: 1 }),
 
   study(5, 'compound', 'Reward Multiplier', 210n, '+12% of base EP per rank. Each rank doubles the next cost.', [ep(1_200)], node('yield'), { max: 4 }),
   study(5, 'synergy', 'Badge Synergy', 530n, '+1 EP for divisibility and digit badges.', [badgeEP('divisibility'), badgeEP('digits')], node('fieldwork')),

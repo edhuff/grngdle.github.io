@@ -11,7 +11,7 @@ import { children } from '../game/math/ast'
 import { analyze } from '../game/math/analysis'
 import { type Expression, compactOddsText, fraction, integerText, notation, oddsText, rarities } from '../game/math'
 import { milestones } from '../game/progression'
-import { classicalRoute, clusterProgress, effectsOf, researchById, researchEra, owns, eras } from '../game/research'
+import { classicalRoute, clusterProgress, effectsOf, researchById, researchEra, owns, eras, revealedResearch } from '../game/research'
 import { BadgeCards, Empty, familyNames, RarityLabel } from './shared'
 
 const collections = [
@@ -146,6 +146,7 @@ export function Statistics({ game }: { game: Game }) {
   const bands = generatorBands(generator)
   const total = bands.reduce((sum, band) => sum + band.weight, 0n)
   const completed = [...path].filter(id => owns(game.purchases, id)).length
+  const revealed = revealedResearch(game.purchases)
   const stats = [
     { name: 'Manual rolls', value: game.rolls.toLocaleString() },
     { name: 'Lifetime EP', value: integerText(game.lifetime) },
@@ -167,7 +168,7 @@ export function Statistics({ game }: { game: Game }) {
       <section className="stats-panel">
         <header className="section-title"><h2>Research milestones</h2></header>
         <div className="milestone-list"><div><strong>{eras[researchEra(game.purchases)]}</strong><span>{completed} / {path.size} Classical gateway candidates studied</span></div>
-          {milestones.map(id => <div key={id}>{owns(game.purchases, id) ? <Check size={15} className="earned" /> : <LockKeyhole size={15} />}
+          {milestones.filter(id => revealed.has(id)).map(id => <div key={id}>{owns(game.purchases, id) ? <Check size={15} className="earned" /> : <LockKeyhole size={15} />}
             <span>{researchById.get(id)?.title}</span></div>)}
         </div>
       </section>

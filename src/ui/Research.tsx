@@ -4,7 +4,7 @@ import { badgeRule } from '../game/attributes'
 import { progress, type Game } from '../game/game'
 import { integerText } from '../game/math'
 import { milestones } from '../game/progression'
-import { dependencies, disciplines, eras, familyGoal, meets, owns, purchaseCost, research, researchById, researchEra, researchRoute, researchStatus, startingStudy, type Requirement } from '../game/research'
+import { dependencies, disciplines, eras, familyGoal, meets, owns, purchaseCost, research, researchById, researchEra, researchStatus, revealedResearch, startingStudy, type Requirement } from '../game/research'
 import { atlases, nodeHeight, nodeWidth, overlaps, type Point } from './research-layout'
 
 const states = {
@@ -16,14 +16,18 @@ const milestoneIds = new Set<string>(milestones)
 const moves: Record<string, [number, number]> = { ArrowLeft: [55, 0], ArrowRight: [-55, 0], ArrowUp: [0, 55], ArrowDown: [0, -55] }
 type Camera = Point & { scale: number }
 
-function Requirements({ condition, game, onSelect }: { condition: Requirement; game: Game; onSelect: (id: string) => void }) {
+function Requirements({ condition, game, revealed, onSelect }: {
+  condition: Requirement; game: Game; revealed: ReadonlySet<string>; onSelect: (id: string) => void
+}) {
   const complete = meets(condition, progress(game), game.lab)
   if ('items' in condition) return <div className="requirement-group">
     <small>{condition.kind === 'count' ? `At least ${condition.amount} of` : condition.kind === 'all' ? 'All of' : 'Any one of'}</small>
-    {condition.items.map((item, index) => <Requirements key={index} condition={item} game={game} onSelect={onSelect} />)}
+    {condition.items.map((item, index) => <Requirements key={index} condition={item} game={game} revealed={revealed} onSelect={onSelect} />)}
   </div>
   return <div className={'requirement' + (complete ? ' met' : '')}>{complete ? <Check size={14} /> : <LockKeyhole size={13} />}
-    {condition.kind === 'node' && <button className="text-button" onClick={() => onSelect(condition.id)}>{researchById.get(condition.id)?.title}<ChevronRight size={13} /></button>}
+    {condition.kind === 'node' && (revealed.has(condition.id)
+      ? <button className="text-button" onClick={() => onSelect(condition.id)}>{researchById.get(condition.id)?.title}<ChevronRight size={13} /></button>
+      : <span>Undiscovered study</span>)}
     {condition.kind === 'families' && <span>{Object.keys(game.discoveries).length} / {familyGoal(condition.amount, game.lab)} badge families observed</span>}
     {condition.kind === 'lifetime' && <span>{integerText(game.lifetime)} / {integerText(game.lab ? (condition.amount + 3199n) / 3200n : condition.amount)} lifetime EP</span>}
     {condition.kind === 'badge' && <span>{game.observations[condition.id]?.count ?? 0} / {game.lab ? 1 : condition.amount} observed · {badgeRule(condition.id).name}</span>}
@@ -40,8 +44,10 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
   game: Game; initialFocus?: string; onBuy: (id: string) => void; onRefund: (id: string) => void; onBookmark: (id: string) => void
 }) {
   const unlocked = researchEra(game.purchases)
-  const [region, setRegion] = useState(initialFocus ? researchById.get(initialFocus)?.region ?? 0 : unlocked)
-  const [selection, setSelection] = useState(initialFocus)
+  const revealed = useMemo(() => revealedResearch(game.purchases), [game.purchases])
+  const focus = initialFocus && revealed.has(initialFocus) ? initialFocus : undefined
+  const [region, setRegion] = useState(focus ? researchById.get(focus)!.region! : unlocked)
+  const [selection, setSelection] = useState(focus)
   const [global, setGlobal] = useState(false)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
@@ -53,19 +59,34 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
   const drag = useRef<{ pointer: number; origin: Point; camera: Point } | null>(null)
   const current = useMemo(() => progress(game), [game])
   const graph = atlases[region]
-  const selected = selection ? researchById.get(selection) : undefined
-  const route = useMemo(() => selection ? researchRoute(selection) : new Set<string>(), [selection])
+  const regionStudies = useMemo(() => graph.items.filter(item => revealed.has(item.id)), [graph, revealed])
+  const regionClusters = useMemo(() => {
+    if (regionStudies.length <= 1) return []
+    const clusters = new Map<string, { first: Point; bottom: number }>()
+    for (const item of regionStudies) {
+      const point = graph.positions.get(item.id)!
+      const bounds = clusters.get(item.cluster!)
+      clusters.set(item.cluster!, {
+        first: bounds && bounds.first.y < point.y ? bounds.first : point,
+        bottom: Math.max(bounds?.bottom ?? 0, point.y),
+      })
+    }
+    return graph.groups.flatMap(group => {
+      const bounds = clusters.get(group.name)
+      return bounds ? [{ ...group, ...bounds }] : []
+    })
+  }, [graph, regionStudies])
+  const selected = selection && revealed.has(selection) ? researchById.get(selection) : undefined
   const rank = selected ? owns(game.purchases, selected.id) : 0
   const status = selected ? researchStatus(selected, current, game.balance, game.lab) : undefined
   const price = selected ? purchaseCost(selected, game.purchases, game.lab) : 0n
   const completed = graph.items.filter(item => owns(game.purchases, item.id)).length
   const visible = { left: (-view.x - 120) / view.scale, top: (-view.y - 100) / view.scale,
     right: (size.width - view.x + 120) / view.scale, bottom: (size.height - view.y + 100) / view.scale }
-  const overview = view.scale < 0.44
   const term = query.trim().toLowerCase()
 
   function matches(item: typeof research[number]) {
-    if (item.region! > unlocked) return false
+    if (!revealed.has(item.id)) return false
     if (filter === 'bookmarks' && !game.bookmarks.includes(item.id)) return false
     if (filter === 'available' && researchStatus(item, current, game.balance, game.lab) !== 'available') return false
     if (filter.startsWith('discipline-') && item.discipline !== Number(filter.slice(11))) return false
@@ -92,7 +113,7 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
 
   function select(id: string) {
     const item = researchById.get(id)
-    if (!item || item.region! > unlocked) return
+    if (!item || !revealed.has(id)) return
     setGlobal(false)
     setRegion(item.region!)
     setSelection(id)
@@ -101,28 +122,44 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
   }
 
   function showRegion(index: number) {
-    if (index > unlocked) return
+    const atlas = atlases[index]
+    const studies = atlas.items.filter(item => revealed.has(item.id))
+    if (!studies.length) return
     setGlobal(false)
     setRegion(index)
     setSelection(undefined)
     setConfirmation(undefined)
-    const atlas = atlases[index]
-    const opening = index === 0 ? startingStudy : atlas.items.find(item => dependencies(item.requires).some(id => researchById.get(id)?.region !== index))?.id
-    show(atlas.positions.get(opening ?? atlas.items[0].id)!, 0.77)
+    const opening = index === 0 ? startingStudy
+      : studies.find(item => dependencies(item.requires).some(id => owns(game.purchases, id) && researchById.get(id)?.region !== index))?.id
+    show(atlas.positions.get(opening ?? studies[0].id)!, 0.77)
   }
 
   function fit() {
     const canvas = viewport.current
-    if (!canvas) return
+    if (!canvas || !regionStudies.length) return
     setGlobal(false)
     setSelection(undefined)
-    const scale = Math.max(0.08, Math.min(0.75, (canvas.clientWidth - 16) / graph.width, (canvas.clientHeight - 150) / graph.height))
-    setView({ x: (canvas.clientWidth - graph.width * scale) / 2, y: 98, scale })
+    setConfirmation(undefined)
+    const points = regionStudies.map(item => graph.positions.get(item.id)!)
+    const left = Math.min(...points.map(point => point.x)) - nodeWidth / 2
+    const right = Math.max(...points.map(point => point.x)) + nodeWidth / 2
+    const top = Math.min(...points.map(point => point.y)) - nodeHeight / 2
+    const bottom = Math.max(...points.map(point => point.y)) + nodeHeight / 2
+    const width = canvas.clientWidth - 32
+    const header = canvas.clientWidth <= 720 ? 124 : 76
+    const height = canvas.clientHeight - header - 64
+    const scale = Math.max(0.08, Math.min(1, width / (right - left), height / (bottom - top)))
+    setView({
+      x: canvas.clientWidth / 2 - (left + right) * scale / 2,
+      y: header + height / 2 - (top + bottom) * scale / 2,
+      scale,
+    })
   }
 
   useLayoutEffect(() => {
     const canvas = viewport.current!
-    if (initialFocus && researchById.has(initialFocus)) select(initialFocus)
+    setSize({ width: canvas.clientWidth, height: canvas.clientHeight })
+    if (focus) select(focus)
     else showRegion(region)
     function wheel(event: WheelEvent) {
       event.preventDefault()
@@ -179,22 +216,23 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
         }
         if (event.key === '+' || event.key === '-') zoom(event.key === '+' ? 1.2 : 1 / 1.2)
       }}>
-      {!global && <div className="map-world" style={{ width: graph.width, height: graph.height, transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
-        {graph.groups.map(group => <div key={group.name} className="atlas-cluster"
-          style={{ left: group.left, width: group.width, height: graph.height - 15 }}>
-          <button onClick={() => show({ x: group.left + group.width / 2, y: 260 }, 0.62)}>{group.name}</button>
+      {!global && <div className={'map-world' + (view.scale <= 0.37 ? ' zoomed-out' : '')}
+        style={{ width: graph.width, height: graph.height, transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
+        {regionClusters.map(group => <div key={group.name} className="atlas-cluster"
+          style={{ left: group.left, width: group.width, height: group.bottom + nodeHeight / 2 + 12 }}>
+          <button onClick={() => show(group.first, 0.62)}>{group.name}</button>
         </div>)}
         <svg className="map-edges" width={graph.width} height={graph.height} aria-hidden="true">
-          {graph.edges.filter(edge => overlaps(edge.bounds, visible)).map(edge => {
-            const active = (route.has(edge.from) && route.has(edge.to)) || edge.from === selection
+          {graph.edges.filter(edge => revealed.has(edge.from) && revealed.has(edge.to) &&
+            (!edge.crossCluster || edge.to === selected?.id) && overlaps(edge.bounds, visible)).map(edge => {
+            const active = edge.to === selected?.id
             return <path key={edge.from + '/' + edge.to} d={edge.path} data-from={edge.from} data-to={edge.to}
-              className={active ? 'edge-highlight' : selection ? 'edge-muted' : edge.crossCluster ? 'edge-cross-cluster' : undefined} />
+              className={(edge.crossCluster ? 'edge-prerequisite' : 'edge-progression') + (active ? ' edge-highlight' : '')} />
           })}
         </svg>
-        {graph.items.map(item => {
+        {regionStudies.map(item => {
           const point = graph.positions.get(item.id)!
           const major = item.type === 'Gateway' || item.type === 'Keystone' || item.id === startingStudy
-          if (overview && !major && item.id !== selection) return null
           if (!overlaps({ left: point.x - nodeWidth / 2, right: point.x + nodeWidth / 2, top: point.y - nodeHeight / 2, bottom: point.y + nodeHeight / 2 }, visible)) return null
           const state = researchStatus(item, current, game.balance, game.lab)
           const level = owns(game.purchases, item.id)
@@ -221,14 +259,14 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
     {global && <div className="atlas-global" aria-label="Era overview">
       {eras.map((name, index) => {
         const gate = researchById.get(eraGate[index])
-        const revealed = index <= unlocked
+        const open = atlases[index].items.some(item => revealed.has(item.id))
         const count = atlases[index].items.filter(item => owns(game.purchases, item.id)).length
-        return <article key={name} className={revealed ? 'revealed-era' : ''}>
-          <button disabled={!revealed} onClick={() => showRegion(index)}>
-            <span>{revealed ? count > 0 && count === atlases[index].items.length ? <Check size={17} /> : <Crosshair size={17} /> : <LockKeyhole size={16} />}</span>
+        return <article key={name} className={open ? 'revealed-era' : ''}>
+          <button disabled={!open} onClick={() => showRegion(index)}>
+            <span>{open ? count > 0 && count === atlases[index].items.length ? <Check size={17} /> : <Crosshair size={17} /> : <LockKeyhole size={16} />}</span>
             <strong>{name}</strong><small>{count} / {atlases[index].items.length} studied</small>
           </button>
-          {gate && revealed && <button className="atlas-gateway-link" onClick={() => select(gate.id)}>{gate.title}<ChevronRight size={13} /></button>}
+          {gate && revealed.has(gate.id) && <button className="atlas-gateway-link" onClick={() => select(gate.id)}>{gate.title}<ChevronRight size={13} /></button>}
         </article>
       })}
     </div>}
@@ -242,7 +280,7 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
         }}>{global ? 'Region' : 'Eras'}</button>
         <select aria-label="Jump to research" value="" onChange={event => select(event.target.value)}>
           <option value="" disabled>Jump to research</option>
-          {[startingStudy, ...milestones, 'magnitude-focus', 'rarity-focus', 'efficiency-focus'].filter(id => researchById.get(id)!.region! <= unlocked).map(id =>
+          {[startingStudy, ...milestones, 'magnitude-focus', 'rarity-focus', 'efficiency-focus'].filter(id => revealed.has(id)).map(id =>
             <option key={id} value={id}>{researchById.get(id)?.title}</option>)}
         </select>
       </div>
@@ -274,7 +312,7 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund, onBookmark }
       {selected.type === 'Gateway' && rank > 0 && selected.region! < unlocked && <button className="secondary-button" onClick={() => showRegion(selected.region! + 1)}>
         Open {eras[selected.region! + 1]}<ChevronRight size={15} />
       </button>}
-      {selected.requires && <div className="node-requirements"><h3>Prerequisites</h3><Requirements condition={selected.requires} game={game} onSelect={select} /></div>}
+      {selected.requires && <div className="node-requirements"><h3>Prerequisites</h3><Requirements condition={selected.requires} game={game} revealed={revealed} onSelect={select} /></div>}
       {confirmation ? <div className="atlas-confirm">
         <p>{confirmation === 'buy' ? `Spend ${integerText(price)} EP to unlock this gateway?` : 'Refund this doctrine investment and affected doctrine studies? Permanent studies will stay available.'}</p>
         <button className="primary-button" onClick={() => {

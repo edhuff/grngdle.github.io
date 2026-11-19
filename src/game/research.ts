@@ -251,6 +251,13 @@ export function researchEra(purchases: Purchases) {
   return 0
 }
 
+export function revealedResearch(purchases: Purchases) {
+  const era = researchEra(purchases)
+  return new Set(research.filter(item => owns(purchases, item.id) > 0 || (
+    item.region! <= era && (item.id === startingStudy || dependencies(item.requires).some(id => owns(purchases, id) > 0))
+  )).map(item => item.id))
+}
+
 export function purchaseCost(item: ResearchNode, state: Purchases, lab = false) {
   const full = rankCost(item, owns(state, item.id), lab)
   const { rebates } = effectsOf(state)

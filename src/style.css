@@ -293,9 +293,9 @@ nav button[aria-current]::after {
 .map-world { position: absolute; inset: 0 auto auto 0; transform-origin: top left; }
 .map-point { position: absolute; }
 .map-edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
-.map-edges path { fill: none; stroke: #5b6353; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.map-edges path.edge-muted { opacity: .45; }
-.map-edges path.edge-highlight { stroke: var(--accent); stroke-width: 2.3; }
+.map-edges path { fill: none; stroke: #5b6353; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.zoomed-out .map-edges path.edge-progression:not(.edge-highlight) { stroke: #79816e; }
+.map-edges path.edge-highlight { stroke: var(--accent); stroke-width: 2; }
 .map-node {
   position: relative;
   display: grid;
@@ -321,6 +321,8 @@ nav button[aria-current]::after {
 .map-node.state-complete { --border-strength: 65%; background: #293327; }
 .map-node.state-complete svg, .map-node.state-complete .map-node-cost { color: var(--green); }
 .map-node.map-milestone { --border-strength: 77%; }
+.zoomed-out .map-node { background: color-mix(in srgb, var(--discipline) 37%, #262a24); }
+.zoomed-out .map-node.state-complete { background: color-mix(in srgb, var(--discipline) 58%, #262a24); }
 .map-node[aria-pressed="true"], .map-node:hover { z-index: 2; outline: 2px solid var(--discipline); outline-offset: 2px; }
 
 .map-toolbar, .map-controls, .node-detail {
@@ -426,8 +428,6 @@ nav button[aria-current]::after {
 
 .atlas-cluster { position: absolute; top: 8px; border: 1px solid #353b31; border-radius: 15px; background: #20251d60; pointer-events: none; }
 .atlas-cluster button { display: block; margin: 12px auto; padding: 8px 12px; border: 1px solid #3e4639; border-radius: 5px; background: #21271f; color: #c4cdbb; font: 650 21px var(--sans); pointer-events: auto; }
-.map-edges path.edge-cross-cluster { opacity: .55; }
-.map-edges path.edge-muted { opacity: .22; }
 .map-node.node-keystone { border-width: 2px; border-radius: 12px 3px; }
 .map-node.node-gateway { border-width: 2px; border-radius: 7px; box-shadow: inset 0 0 0 2px #161a15; }
 .map-node.node-specialization { border-style: dashed; }

@@ -1,13 +1,13 @@
-import { useEffect, type CSSProperties } from 'react'
+import { useEffect, useMemo, type CSSProperties } from 'react'
 import { ArrowUpRight, ChevronDown } from 'lucide-react'
 import { badgeRule } from '../game/attributes'
 import { progress, rollRarity, type Game } from '../game/game'
 import { compactOddsText, integerText, notation, oddsText } from '../game/math'
 import { milestones } from '../game/progression'
-import { eras, owns, purchaseCost, researchById, researchEra, researchStatus } from '../game/research'
+import { eras, owns, purchaseCost, researchById, researchEra, researchStatus, revealedResearch, startingStudy } from '../game/research'
 import { BadgeCards, RarityLabel } from './shared'
 
-type Props = { game: Game; rolling: boolean; onRoll: () => void; onResearch: (id: string) => void }
+type Props = { game: Game; rolling: boolean; onRoll: () => void; onResearch: (id?: string) => void }
 
 function RollNumber({ text, rolling }: { text: string; rolling: boolean }) {
   const numberStyle = {
@@ -36,8 +36,10 @@ export function Play({ game, rolling, onRoll, onResearch }: Props) {
   const visibleRoll = rolling ? game.recent[1] : roll
   const rarity = visibleRoll ? rollRarity(visibleRoll) : undefined
   const milestoneId = milestones.find(id => !owns(game.purchases, id))
-  const milestone = milestoneId ? researchById.get(milestoneId) : undefined
-  const ready = milestone && researchStatus(milestone, progress(game), game.balance, game.lab) === 'available'
+  const revealed = useMemo(() => revealedResearch(game.purchases), [game.purchases])
+  const nextId = owns(game.purchases, startingStudy) ? milestoneId : startingStudy
+  const nextStudy = nextId && revealed.has(nextId) ? researchById.get(nextId) : undefined
+  const ready = nextStudy && researchStatus(nextStudy, progress(game), game.balance, game.lab) === 'available'
 
   useEffect(() => {
     function handleSpace(event: KeyboardEvent) {
@@ -90,9 +92,9 @@ export function Play({ game, rolling, onRoll, onResearch }: Props) {
       </details>}
     </div>
 
-    {milestone && <button className="roll-milestone" aria-label="Explore research" onClick={() => onResearch(milestone.id)}>
-      <span className="milestone-label"><small>Next research</small><strong>{milestone.title}</strong></span>
-      <span className={ready ? 'milestone-cost earned' : 'milestone-cost'}>{ready ? 'Ready' : integerText(purchaseCost(milestone, game.purchases, game.lab)) + ' EP'}</span>
+    {milestoneId && <button className="roll-milestone" aria-label="Explore research" onClick={() => onResearch(nextStudy?.id)}>
+      <span className="milestone-label">{nextStudy && <small>Next research</small>}<strong>{nextStudy?.title ?? 'Explore research'}</strong></span>
+      {nextStudy && <span className={ready ? 'milestone-cost earned' : 'milestone-cost'}>{ready ? 'Ready' : integerText(purchaseCost(nextStudy, game.purchases, game.lab)) + ' EP'}</span>}
       <ArrowUpRight size={15} aria-hidden="true" />
     </button>}
   </div>

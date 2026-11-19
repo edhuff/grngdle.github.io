@@ -6,7 +6,7 @@ import { replay, seededWords } from '../src/game/generator'
 import { inspectInteger } from '../src/game/inspection'
 import { integer } from '../src/game/math'
 import { addProbability, fraction, multiplyProbability } from '../src/game/math/probability'
-import { classicalRoute, clusterProgress, dependencies, effectsOf, meets, purchaseCost, rankCost, research, researchById, researchRoute, researchStatus, validateResearch } from '../src/game/research'
+import { classicalRoute, clusterProgress, dependencies, effectsOf, meets, purchaseCost, rankCost, research, researchById, researchRoute, researchStatus, revealedResearch, validateResearch } from '../src/game/research'
 import { classicalClusters } from '../src/game/research/classical'
 import { all, countOf, found, node } from '../src/game/research/requirements'
 import { importSave, exportSave } from '../src/game/save'
@@ -23,6 +23,20 @@ test('all Classical clusters and doctrine investments have complete definitions'
   for (const choice of ['magnitude', 'rarity', 'efficiency']) assert.equal(research.filter(item => item.doctrine === choice).length, 20)
   assert(classicalRoute().size >= 30 && classicalRoute().size <= 51)
   validateResearch(research)
+})
+
+test('research fog reveals purchased studies and only their immediate successors in open eras', () => {
+  assert.deepEqual([...revealedResearch({})], ['yield'])
+  const opening = revealedResearch({ yield: 1 })
+  assert(opening.has('place-value') && opening.has('compound'))
+  assert(!opening.has('repetition'))
+  const frontier = revealedResearch({ yield: 1, operators: 1, 'classical-bounds': 1 })
+  assert(frontier.has('operators') && frontier.has('syntax'))
+  assert(!frontier.has('symmetry') && !frontier.has('grammar'))
+  assert(!frontier.has('twelve-digit-frontier'))
+  const expanded = revealedResearch({ yield: 1, expansion: 1, 'classical-bounds': 1 })
+  assert(expanded.has('expansion') && expanded.has('anomaly') && expanded.has('twelve-digit-frontier'))
+  assert(!expanded.has('arithmetic'))
 })
 
 test('every Classical study and repeatable rank can be earned through manual rolls', () => {

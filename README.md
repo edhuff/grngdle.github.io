@@ -6,7 +6,7 @@ A manual RNG collection game about the mathematics of large numbers. Start with 
 
 Open [gRNGdle](https://edhuff.github.io/grngdle.github.io/). Click **Roll** or press **Space** for one draw. Research spends earned EP and changes what future manual rolls can produce. Collection and Statistics can display additional analyses, observations, and records as you research them.
 
-In Research, drag to pan and scroll or use the buttons to zoom. **Eras** opens the global view. Region views show clusters and prerequisite links, and selecting a study opens its requirements and purchase controls. Search covers unlocked eras and can filter by discipline, affordability, and bookmarks. Major breakthroughs and doctrine refunds ask for confirmation.
+In Research, drag to pan and scroll or use the buttons to zoom. **Eras** opens the global view. The map starts with Yield Calibration and reveals the immediate successors of purchased studies within open eras. Select a study to see its additional prerequisite links and purchase controls. Search covers revealed studies and can filter by discipline, affordability, and bookmarks. Major breakthroughs and doctrine refunds ask for confirmation.
 
 GitHub Pages serves the static site from the root of `main`. Run `npm run build:pages` and commit the generated `index.html` and `pages-assets/` with source changes. Make HTML edits in `src/index.html`. Browser saves are scoped to the site origin, and Settings supports export, import, and reset.
 

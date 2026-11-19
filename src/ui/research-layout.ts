@@ -4,64 +4,24 @@ export const nodeHeight = 56
 export type Point = { x: number; y: number }
 
 const positions: Record<string, [number, number]> = {
-  journal: [125, 90], archive: [330, 65], inspection: [535, 75], registry: [770, 91],
-  yield: [140, 180], compound: [345, 190], synergy: [575, 210], capital: [830, 220],
-  catalog: [105, 285], squares: [325, 290], classifier: [550, 316], atlas: [815, 340],
-  repetition: [165, 405], motifs: [365, 397], symmetry: [600, 425], 'pattern-model': [850, 451],
-  odds: [100, 511], distribution: [303, 495], variance: [545, 535], 'tail-model': [835, 565],
-  'place-value': [155, 618], radix: [365, 602], boundaries: [600, 637], horizon: [850, 666],
-  notation: [108, 726], operators: [325, 719], syntax: [535, 746], grammar: [790, 762],
-  measurement: [155, 832], bounds: [390, 820], invariants: [635, 847], verification: [875, 875],
-  fieldwork: [770, 161], 'peer-review': [960, 145], synthesis: [1135, 260], 'classical-review': [1325, 337],
-  expansion: [1510, 474], arithmetic: [1735, 437], nesting: [1960, 437], vast: [1760, 618],
-  anomaly: [1508, 661],
-  'magnitude-focus': [1484, 808], 'rarity-focus': [1700, 843], 'efficiency-focus': [1920, 799],
+  yield: [720, 55],
+  'place-value': [333, 145], catalog: [760, 145], odds: [1050, 145], compound: [1280, 145],
+  radix: [196, 238], repetition: [444, 238], notation: [628, 238], squares: [840, 238], distribution: [1050, 238], fieldwork: [1280, 238],
+  boundaries: [115, 333], measurement: [299, 333], motifs: [482, 333], operators: [677, 333],
+  classifier: [870, 333], variance: [1050, 333], synergy: [1280, 333],
+  horizon: [115, 430], bounds: [302, 430], symmetry: [490, 430], atlas: [875, 430], 'tail-model': [1050, 430], 'peer-review': [1280, 430],
+  invariants: [302, 520], 'pattern-model': [490, 520], syntax: [686, 520], capital: [1280, 520],
+  verification: [302, 613], grammar: [686, 613],
+  synthesis: [473, 716], 'classical-review': [1020, 716],
+  expansion: [720, 822],
+  anomaly: [380, 931], 'magnitude-focus': [605, 931], 'rarity-focus': [833, 931], 'efficiency-focus': [1060, 931],
+  arithmetic: [720, 1040], nesting: [720, 1144], vast: [720, 1248],
 }
 
 export function positionOf(id: string): Point {
   const point = positions[id]
   if (!point) throw new Error('Missing research position for ' + id)
   return { x: point[0], y: point[1] }
-}
-
-const expansionJunctionX = 1230
-const expansionY = positionOf('expansion').y
-const junctionBend = 12
-
-function inletBend(sourceY: number) {
-  return Math.max(0, Math.min(24, Math.abs(sourceY - expansionY) - junctionBend))
-}
-
-export function expansionJunction(sources: Point[]) {
-  const x = expansionJunctionX
-  const y = expansionY
-  const inlets = sources.map(point => point.y + Math.sign(y - point.y) * inletBend(point.y))
-  const top = Math.min(y, ...inlets)
-  const bottom = Math.max(y, ...inlets)
-  const trunk = [
-    top < y ? `M${x},${top} V${y - junctionBend} Q${x},${y} ${x + junctionBend},${y}` : '',
-    bottom > y ? `M${x},${bottom} V${y + junctionBend} Q${x},${y} ${x + junctionBend},${y}` : '',
-  ].filter(Boolean).join(' ')
-  return {
-    trunk,
-    exit: `M${x + junctionBend},${y} H${positionOf('expansion').x - nodeWidth / 2}`,
-  }
-}
-
-export function expansionLink(from: Point) {
-  const x = expansionJunctionX
-  const radius = inletBend(from.y)
-  const start = `M${from.x + nodeWidth / 2},${from.y}`
-  if (from.y === expansionY) return `${start} H${x + junctionBend}`
-  const joinY = from.y + Math.sign(expansionY - from.y) * radius
-  return `${start} H${x - radius} Q${x},${from.y} ${x},${joinY}`
-}
-
-export function overviewPath(from: Point, to: Point) {
-  const start = from.x + nodeWidth / 2
-  const end = to.x - nodeWidth / 2
-  const middle = (start + end) / 2
-  return `M${start},${from.y} C${middle},${from.y} ${middle},${to.y} ${end},${to.y}`
 }
 
 function roundedPath(route: Point[]) {
@@ -93,18 +53,31 @@ function roundedPath(route: Point[]) {
   return segments.join(' ')
 }
 
-export function focusPath(from: Point, to: Point, points: Point[]) {
+export function progressionPath(from: Point, to: Point, points: Point[]) {
   const halfWidth = nodeWidth / 2
   const halfHeight = nodeHeight / 2
   const gutter = 8
-  const horizontal = Math.abs(to.x - from.x) > nodeWidth + gutter * 2
-  const travel = Math.sign(horizontal ? to.x - from.x : to.y - from.y) || 1
-  const offset = (point: Point, length: number): Point => horizontal
-    ? { x: point.x + length * travel, y: point.y }
-    : { x: point.x, y: point.y + length * travel }
-  const boundary = horizontal ? halfWidth : halfHeight
-  const start = offset(from, boundary + gutter)
-  const end = offset(to, -(boundary + gutter))
+  const fromPort = { x: from.x, y: from.y + halfHeight }
+  const toPort = { x: to.x, y: to.y - halfHeight }
+  const middle = (fromPort.y + toPort.y) / 2
+  const curve = `M${fromPort.x},${fromPort.y} C${from.x},${middle} ${to.x},${middle} ${toPort.x},${toPort.y}`
+  const steps = Math.ceil(Math.max(Math.abs(to.x - from.x), toPort.y - fromPort.y) / 6)
+  const obstacles = points.filter(point => (point.x !== from.x || point.y !== from.y) && (point.x !== to.x || point.y !== to.y))
+  let blocked = false
+  for (let index = 1; index < steps; index++) {
+    const t = index / steps
+    const rest = 1 - t
+    const x = from.x * (rest ** 3 + 3 * rest ** 2 * t) + to.x * (3 * rest * t ** 2 + t ** 3)
+    const y = fromPort.y * rest ** 3 + middle * 3 * rest * t + toPort.y * t ** 3
+    if (obstacles.some(point => Math.abs(point.x - x) < halfWidth + gutter && Math.abs(point.y - y) < halfHeight + gutter)) {
+      blocked = true
+      break
+    }
+  }
+  if (!blocked) return curve
+
+  const start = { x: fromPort.x, y: fromPort.y + gutter }
+  const end = { x: toPort.x, y: toPort.y - gutter }
 
   const segmentIsClear = (a: Point, b: Point) => !points.some(node =>
     Math.min(a.x, b.x) < node.x + halfWidth + gutter &&
@@ -147,6 +120,5 @@ export function focusPath(from: Point, to: Point, points: Point[]) {
     }
   }
 
-  const route = [offset(from, boundary), ...(best ?? [start, { x: end.x, y: start.y }, end]), offset(to, -boundary)]
-  return roundedPath(route)
+  return best ? roundedPath([fromPort, ...best, toPort]) : curve
 }

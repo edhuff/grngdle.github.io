@@ -2,7 +2,7 @@ import { rewards } from '../src/game/economy'
 import { manualRoll, newGame, progress, purchase } from '../src/game/game'
 import { generate, seededWords } from '../src/game/generator'
 import { milestones } from '../src/game/progression'
-import { classicalRoute, effectsOf, owns, rankCost, research, researchStatus } from '../src/game/research'
+import { classicalRoute, effectsOf, owns, rankCost, research, researchById, researchStatus } from '../src/game/research'
 
 const samples = Number(process.argv[2] ?? 250_000)
 const runs = Number(process.argv[3] ?? 8)
@@ -23,7 +23,7 @@ for (let index = 0; index < samples; index++) {
 const route = classicalRoute()
 const choices = research.filter(item => route.has(item.id) && item.id !== 'expansion')
   .sort((a, b) => a.cost < b.cost ? -1 : a.cost > b.cost ? 1 : 0)
-choices.push(...milestones.map(id => research.find(item => item.id === id)!))
+choices.push(...[milestones[0], 'efficiency-focus', ...milestones.slice(1)].map(id => researchById.get(id)!))
 const results = milestones.map(() => [] as number[])
 const routedIncome: number[] = []
 

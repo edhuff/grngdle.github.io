@@ -4,9 +4,9 @@ import { progress, type Game } from '../game/game'
 import { integerText } from '../game/math'
 import { milestones } from '../game/progression'
 import {
-  dependencies, disciplines, familyGoal, meets, owns, rankCost, research, researchById, researchEra, researchStatus, type Requirement,
+  dependencies, disciplines, familyGoal, meets, owns, rankCost, research, researchById, researchEra, researchStatus, startingStudy, type Requirement,
 } from '../game/research'
-import { expansionJunction, expansionLink, focusPath, nodeHeight, nodeWidth, overviewPath, positionOf, type Point } from './research-layout'
+import { nodeHeight, nodeWidth, positionOf, progressionPath, type Point } from './research-layout'
 
 const states = {
   complete: 'Researched', locked: 'Prerequisites unmet', exclusive: 'Specialization active', unaffordable: 'Needs EP', available: 'Available',
@@ -32,7 +32,7 @@ const moves: Record<string, [number, number]> = { ArrowLeft: [55, 0], ArrowRight
 function centered(canvas: HTMLDivElement, point: Point, scale: number, details: boolean): Camera {
   const narrow = canvas.clientWidth <= 720
   const x = canvas.clientWidth * (narrow || !details ? 0.5 : 0.39)
-  const y = canvas.clientHeight * (narrow && details ? 0.32 : 0.50)
+  const y = canvas.clientHeight * (narrow ? (details ? 0.32 : 0.23) : 0.50)
   return { x: x - point.x * scale, y: y - point.y * scale, scale }
 }
 
@@ -62,45 +62,26 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund }: {
   const era = researchEra(game.purchases)
   const graph = useMemo(() => {
     const shown = research.filter(item => (item.era ?? 0) <= era)
+      .sort((a, b) => {
+        const first = positionOf(a.id)
+        const second = positionOf(b.id)
+        return first.y - second.y || first.x - second.x
+      })
     const ids = new Set(shown.map(item => item.id))
     const points = shown.map(item => positionOf(item.id))
-    const connections = shown.flatMap(item => dependencies(item.requires).filter(id => ids.has(id)).map(id => ({
-      from: id, to: item.id, junction: item.id === 'expansion' && id !== 'classical-review',
-      primary: (!milestoneIds.has(item.id) && researchById.get(id)?.discipline === item.discipline) ||
-        (id === 'classical-review' && item.id === 'expansion') || (milestoneIds.has(id) && milestoneIds.has(item.id)),
+    const edges = shown.flatMap(item => dependencies(item.requires).filter(id => ids.has(id)).map(id => ({
+      from: id,
+      to: item.id,
+      line: progressionPath(positionOf(id), positionOf(item.id), points),
     })))
     return {
-      shown, ids, points, connections,
+      shown, ids, edges,
       width: Math.max(...points.map(item => item.x)) + nodeWidth / 2 + 22,
       height: Math.max(...points.map(item => item.y)) + nodeHeight / 2 + 22,
     }
   }, [era])
-  const edges = useMemo(() => {
-    const branches = graph.connections.filter(connection => connection.junction)
-    const junction = expansionJunction(branches.map(connection => positionOf(connection.from)))
-    const expansionActive = selection === 'expansion'
-    const selectedBranch = branches.find(connection => connection.from === selection)
-    const edges = graph.connections.flatMap(({ from, to, primary, junction }) => {
-      const active = from === selection || to === selection
-      if (!primary && !junction && !active) return []
-      return [{
-        id: from + '/' + to,
-        active, junction, cross: !primary && !junction,
-        line: junction ? expansionLink(positionOf(from))
-          : primary ? overviewPath(positionOf(from), positionOf(to))
-          : focusPath(positionOf(from), positionOf(to), graph.points),
-      }]
-    })
-    edges.push({ id: 'expansion/junction', line: junction.trunk, active: expansionActive, junction: true, cross: false })
-    edges.push({ id: 'expansion/exit', line: junction.exit, active: expansionActive || !!selectedBranch, junction: true, cross: false })
-    if (selectedBranch) {
-      edges.push({
-        id: 'expansion/active-branch', line: expansionJunction([positionOf(selectedBranch.from)]).trunk,
-        active: true, junction: true, cross: false,
-      })
-    }
-    return edges.sort((a, b) => Number(a.active) - Number(b.active))
-  }, [graph, selection])
+  const edges = graph.edges.map(edge => ({ ...edge, active: edge.from === selection || edge.to === selection }))
+    .sort((a, b) => Number(a.active) - Number(b.active))
   const selected = selection ? researchById.get(selection) : undefined
   const rank = selected ? owns(game.purchases, selected.id) : 0
   const status = selected ? researchStatus(selected, current, game.balance, game.lab) : undefined
@@ -150,7 +131,7 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund }: {
     if (!canvas) return
     const starter = initialFocus && graph.ids.has(initialFocus) ? initialFocus : undefined
     if (canvas.clientWidth <= 720) {
-      setView(centered(canvas, positionOf(starter ?? 'yield'), 0.92, !!starter))
+      setView(centered(canvas, positionOf(starter ?? startingStudy), 0.92, !!starter))
     } else {
       const fitCamera = overview(canvas)
       setView(starter ? revealAtCurrentZoom(canvas, positionOf(starter), fitCamera) : fitCamera)
@@ -201,8 +182,8 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund }: {
       }}>
       <div className="map-world" style={{ width: graph.width, height: graph.height, transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
         <svg className="map-edges" width={graph.width} height={graph.height} aria-hidden="true">
-          {edges.map(edge => <path key={edge.id} d={edge.line}
-            className={[edge.active ? 'edge-highlight' : selection ? 'edge-muted' : '', edge.cross ? 'edge-cross' : '', edge.junction ? 'edge-junction' : ''].join(' ')} />)}
+          {edges.map(edge => <path key={edge.from + '/' + edge.to} d={edge.line} data-from={edge.from} data-to={edge.to}
+            className={edge.active ? 'edge-highlight' : selection ? 'edge-muted' : undefined} />)}
         </svg>
         {graph.shown.map(item => {
           const state = researchStatus(item, current, game.balance, game.lab)
@@ -239,10 +220,11 @@ export function ResearchView({ game, initialFocus, onBuy, onRefund }: {
 
     <header className="map-toolbar">
       <div><h1>Research map</h1><p>{Object.keys(game.purchases).length} / {graph.shown.length} researched</p></div>
-      <select aria-label="Jump to discipline" value="" onChange={event => {
-        const item = research.find(item => item.discipline === Number(event.target.value))
-        if (item) select(item.id, true)
-      }}><option value="" disabled>Jump to discipline</option>{disciplines.map((entry, index) => <option key={entry.name} value={index}>{entry.name}</option>)}</select>
+      <select aria-label="Jump to research" value="" onChange={event => select(event.target.value, true)}>
+        <option value="" disabled>Jump to research</option>
+        {[startingStudy, ...milestones].filter(id => graph.ids.has(id)).map(id =>
+          <option key={id} value={id}>{researchById.get(id)?.title}</option>)}
+      </select>
     </header>
 
     {selected && status && <aside className="node-detail" aria-label="Research details" key={selected.id}>

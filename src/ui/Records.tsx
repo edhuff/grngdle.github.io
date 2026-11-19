@@ -48,8 +48,8 @@ function RollDetail({ roll, game }: { roll: Roll; game: Game }) {
     <h2>{notation(roll.expression)}</h2>
     <div className="record-meta"><RarityLabel probability={roll.probability} /><span>{oddsText(roll.probability)}</span><span className="earned">+{integerText(roll.earned)} EP</span></div>
     <p className="detail-subtitle">{expressions ? 'Odds for this ordered expression. Equivalent values can come from different rolls.' : 'Exact outcome odds for this integer.'} Generator v{roll.generatorVersion}.</p>
-    {effectsOf(game.purchases).inspector && <div className="inspector"><strong>Roll inspector</strong>
-      <span>Exact value {value === null ? 'undetermined' : integerText(value)} · Depth {depth(roll.expression)}</span></div>}
+    <div className="inspector"><strong>Roll inspector</strong>
+      <span>Exact value {value === null ? 'undetermined' : integerText(value)} · Depth {depth(roll.expression)}</span></div>
     <BadgeCards badges={roll.badges} odds={game.settings.showBadgeOdds} />
     {roll.bonus > 0n && <p className="reward-bonus">Research bonus <strong>+{integerText(roll.bonus)} EP</strong></p>}
   </>

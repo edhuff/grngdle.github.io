@@ -6,7 +6,7 @@ import { manualRoll, newGame, progress, purchase, refund } from '../src/game/gam
 import { CLASSICAL_MAX, DISTRIBUTION_TOTAL, EXPANDED_MAX, VAST_MAX, generate, generatorBands, seededWords, uniformBelow } from '../src/game/generator'
 import { depth, fraction, integer, magnitude, notation, rarityOf } from '../src/game/math'
 import { milestones } from '../src/game/progression'
-import { classicalRoute, effectsOf, meets, rankCost, research, researchById, researchStatus, validateResearch, type ResearchNode } from '../src/game/research'
+import { classicalRoute, dependencies, effectsOf, meets, rankCost, research, researchById, researchRoute, researchStatus, startingStudy, validateResearch, type ResearchNode } from '../src/game/research'
 import { exportSave, importSave } from '../src/game/save'
 
 test('classical generator includes both endpoints and rejects biased overflow draws', () => {
@@ -101,10 +101,25 @@ test('research validates cycles, missing nodes, AND and OR prerequisites', () =>
   assert.throws(() => validateResearch([missing]), /Invalid research node/)
   assert.throws(() => validateResearch([{ ...root, requires: { kind: 'node', id: root.id } }]), /Cyclic/)
   assert.throws(() => validateResearch([root, root]), /Duplicate/)
-  const bounds = researchById.get('bounds')!
-  assert(!meets(bounds.requires, { purchases: { measurement: 1 }, families: 0 }))
-  assert(meets(bounds.requires, { purchases: { measurement: 1, radix: 1 }, families: 0 }))
-  assert(meets(bounds.requires, { purchases: { measurement: 1, squares: 1 }, families: 0 }))
+  const syntax = researchById.get('syntax')!
+  assert(!meets(syntax.requires, { purchases: { operators: 1 }, families: 0 }))
+  assert(meets(syntax.requires, { purchases: { operators: 1, symmetry: 1 }, families: 0 }))
+  const grammar = researchById.get('arithmetic')!
+  assert(!meets(grammar.requires, { purchases: { expansion: 1 }, families: 0 }))
+  assert(meets(grammar.requires, { purchases: { anomaly: 1 }, families: 0 }))
+  for (const choice of ['magnitude-focus', 'rarity-focus', 'efficiency-focus']) {
+    assert(meets(grammar.requires, { purchases: { [choice]: 1 }, families: 0 }))
+  }
+})
+
+test('research has one root and every study feeds a major milestone', () => {
+  assert.deepEqual(research.filter(item => !dependencies(item.requires).length).map(item => item.id), [startingStudy])
+  const routes = milestones.map(researchRoute)
+  for (const item of research) {
+    assert(researchRoute(item.id).has(startingStudy), item.id)
+    assert(routes.some(route => route.has(item.id)), item.id)
+  }
+  for (const id of ['journal', 'archive', 'inspection', 'registry']) assert(!researchById.has(id))
 })
 
 test('milestones unlock at their EP cost and prerequisites regardless of roll count', () => {
@@ -119,6 +134,10 @@ test('milestones unlock at their EP cost and prerequisites regardless of roll co
     const item = researchById.get(id)!
     const price = rankCost(item, 0)
     assert.equal(researchStatus(item, progress(newGame()), price), 'locked')
+    if (id === 'arithmetic') {
+      assert.equal(researchStatus(item, progress(state), price), 'locked')
+      state = { ...state, purchases: { ...state.purchases, anomaly: 1 } }
+    }
     assert.equal(researchStatus(item, progress(state), price - 1n), 'unaffordable')
     const purchased = purchase({ ...state, balance: price }, id)
     assert.equal(purchased.purchases[id], 1)
@@ -128,9 +147,8 @@ test('milestones unlock at their EP cost and prerequisites regardless of roll co
   }
 })
 
-test('specializations are exclusive and refundable without revoking permanent unlocks', () => {
-  const route = [...classicalRoute(), 'arithmetic']
-  const purchases = Object.fromEntries(route.map(id => [id, 1]))
+test('specializations can be refunded after unlocking a permanent milestone', () => {
+  const purchases = Object.fromEntries([...classicalRoute()].map(id => [id, 1]))
   const state = {
     ...newGame(), balance: 50_000n, rolls: 15_000, purchases,
     discoveries: { parity: 41, divisibility: 23, digits: 19, prime: 7, sequence: 2, mirror: 1 },
@@ -139,9 +157,13 @@ test('specializations are exclusive and refundable without revoking permanent un
   assert.equal(specialized.balance, 48_200n)
   assert.equal(effectsOf(specialized.purchases).generator.specialization, 'magnitude')
   assert.equal(purchase(specialized, 'efficiency-focus'), specialized)
-  const returned = refund(specialized, 'magnitude-focus')
-  assert.deepEqual(returned, state)
+  assert.deepEqual(refund(specialized, 'magnitude-focus'), state)
+  const learned = purchase(specialized, 'arithmetic')
+  const returned = refund(learned, 'magnitude-focus')
+  assert.equal(returned.balance, learned.balance + 1_800n)
+  assert.deepEqual(returned.retainedResearch, ['arithmetic'])
   assert.equal(effectsOf(returned.purchases).generator.arithmetic, true)
+  assert.equal(effectsOf(returned.purchases).generator.specialization, null)
   assert.equal(refund(returned, 'arithmetic'), returned)
 })
 
@@ -189,7 +211,7 @@ test('versioned saves round-trip records, validate purchases, and isolate develo
   assert.deepEqual(importSave(saved), game)
   assert.throws(() => importSave(saved, true), /different game mode/)
   assert.throws(() => importSave('{'), /JSON/)
-  assert.throws(() => importSave(saved.replace('"schema":3', '"schema":55')), /unsupported/)
+  assert.throws(() => importSave(saved.replace('"schema":4', '"schema":55')), /unsupported/)
   assert.throws(() => importSave(saved.replace('"purchases":{', '"purchases":{"__proto__":1,')), /Malformed/)
   assert.throws(() => importSave(saved.replace(/"balance":"\d+"/, '"balance":"0"')), /Research spending/)
   const altered = JSON.parse(saved)
@@ -222,11 +244,36 @@ test('legacy saves keep research and history and receive a rebate on old prices'
   assert.throws(() => importSave(JSON.stringify(legacy)), /Research spending/)
 })
 
+test('upgraded saves refund Discovery and retain historical studies with changed prerequisites', () => {
+  let game = newGame()
+  const word = seededWords(22)
+  for (let index = 0; index < 700; index++) game = manualRoll(game, word)
+  assert.equal(game.recent.length, 90)
+  const raw = JSON.parse(exportSave(game))
+  raw.schema = 3
+  raw.purchases = { journal: 1, archive: 1, inspection: 1, registry: 1, catalog: 1, 'place-value': 1 }
+  raw.balance = String(game.lifetime - 298n)
+  const migrated = importSave(JSON.stringify(raw))
+  assert.deepEqual(migrated.purchases, { catalog: 1, 'place-value': 1 })
+  assert.deepEqual(migrated.retainedResearch, ['catalog', 'place-value'])
+  assert.deepEqual(migrated.recent, game.recent)
+  assert.equal(migrated.lifetime, game.lifetime)
+  assert.equal(migrated.balance - BigInt(raw.balance), 283n)
+  assert.deepEqual(importSave(exportSave(migrated)), migrated)
+
+  raw.schema = 2
+  raw.balance = String(game.lifetime - 1_490n)
+  assert.deepEqual(importSave(JSON.stringify(raw)), migrated)
+  raw.purchases.registry = 2
+  assert.throws(() => importSave(JSON.stringify(raw)), /Malformed/)
+})
+
 test('lab progression can reach symbolic rolls and still credits EP strictly from individual actions', () => {
   const word = seededWords(234)
   let game = newGame(true)
   const route = classicalRoute()
-  const targets = [...research.filter(item => route.has(item.id)), researchById.get('arithmetic')!, researchById.get('nesting')!, researchById.get('vast')!]
+  const targets = [...research.filter(item => route.has(item.id)),
+    ...['efficiency-focus', 'arithmetic', 'nesting', 'vast'].map(id => researchById.get(id)!)]
   for (let index = 0; index < 480; index++) {
     game = manualRoll(game, word)
     for (const item of targets) {
@@ -239,4 +286,7 @@ test('lab progression can reach symbolic rolls and still credits EP strictly fro
   assert(game.recent.some(roll => roll.expression.kind !== 'integer') || game.rarest.some(roll => roll.expression.kind !== 'integer'))
   assert.equal(game.recent.length, 90)
   assert.deepEqual(importSave(exportSave(game), true), game)
+  const refunded = refund(game, 'efficiency-focus')
+  assert.deepEqual(refunded.retainedResearch, ['arithmetic'])
+  assert.deepEqual(importSave(exportSave(refunded), true), refunded)
 })

@@ -1,12 +1,15 @@
 import { badgeIds, badgeRule, type Badge, type BadgeFamily, type BadgeId } from './attributes'
-import { newGame, progress, type Game, type Roll } from './game'
+import { newGame, progress, recentRollLimit, type Game, type Roll } from './game'
 import { CLASSICAL_MAX, EXPANDED_MAX, GENERATOR_VERSION, VAST_MAX } from './generator'
 import { depth, fraction, magnitude, rarities, type Expression } from './math'
-import { effectsOf, meets, rankCost, researchById } from './research'
+import { meets, owns, rankCost, researchById } from './research'
 
 const maxSize = 1_000_000
 const storageKey = (lab: boolean) => 'grngdle.save.' + (lab ? 'lab' : 'production')
 const families = new Set(badgeIds.map(id => badgeRule(id).family))
+const retiredDiscoveryCosts = new Map([
+  ['journal', 50n], ['archive', 135n], ['inspection', 360n], ['registry', 870n],
+])
 
 function invalid(message = 'Malformed save data.'): never { throw new Error(message) }
 function object(value: unknown): Record<string, unknown> {
@@ -84,7 +87,7 @@ export function exportSave(game: Game) {
 
 function migrate(raw: Record<string, unknown>) {
   if (raw.schema === 1) return { ...raw, settings: { ...object(raw.settings), showBadgeOdds: false } }
-  if (raw.schema !== 2 && raw.schema !== 3) return invalid('This save version is unsupported.')
+  if (raw.schema !== 2 && raw.schema !== 3 && raw.schema !== 4) return invalid('This save version is unsupported.')
   return raw
 }
 
@@ -97,6 +100,7 @@ export function importSave(text: string, lab = false): Game {
   const rolls = count(raw.rolls)
   const lifetime = decimal(raw.lifetime)
   const savedBalance = decimal(raw.balance)
+  const legacySave = raw.schema !== 4
   const legacyPricing = raw.schema === 1 || raw.schema === 2
   if (rolls === 0 ? lifetime !== 0n : lifetime < BigInt(rolls)) return invalid()
   const purchases: Game['purchases'] = {}
@@ -105,7 +109,14 @@ export function importSave(text: string, lab = false): Game {
   let specializations = 0
   for (const [id, value] of Object.entries(object(raw.purchases))) {
     const item = researchById.get(id)
-    if (!item) return invalid()
+    if (!item) {
+      const retiredCost = legacySave ? retiredDiscoveryCosts.get(id) : undefined
+      if (retiredCost === undefined) return invalid()
+      count(value, 1, 1)
+      const cost = legacyPricing ? retiredCost : (retiredCost + 4n) / 5n
+      savedSpent += rankCost({ cost }, 0, lab)
+      continue
+    }
     const rank = count(value, 1, item.max ?? 1)
     purchases[id] = rank
     for (let level = 0; level < rank; level++) {
@@ -138,7 +149,7 @@ export function importSave(text: string, lab = false): Game {
     }
     return decoded
   }
-  const recent = readRolls('recent', effectsOf(purchases).history)
+  const recent = readRolls('recent', recentRollLimit)
   if (recent.some((roll, index) => roll.index !== rolls - index)) return invalid()
   const rarest = readRolls('rarest', 12)
   const highest = readRolls('highest', 12)
@@ -146,12 +157,26 @@ export function importSave(text: string, lab = false): Game {
   if (largest.some(roll => magnitude(roll.expression) === null)) return invalid()
   const settings = object(raw.settings)
   const game: Game = {
-    schema: 3, lab, rolls, lifetime, balance: lifetime - currentSpent, purchases, discoveries, distribution, recent, rarest, highest, largest,
+    schema: 4, lab, rolls, lifetime, balance: lifetime - currentSpent, purchases, retainedResearch: [], discoveries, distribution, recent, rarest, highest, largest,
     settings: { animations: bool(settings.animations), reducedEffects: bool(settings.reducedEffects), showBadgeOdds: bool(settings.showBadgeOdds) },
   }
-  if (Object.keys(purchases).some(id => !meets(researchById.get(id)?.requires, progress(game), lab))) {
+  const current = progress(game)
+  const unmet = Object.keys(purchases).filter(id => !meets(researchById.get(id)?.requires, current, lab))
+  if (legacySave) {
+    game.retainedResearch = unmet
+    return game
+  }
+
+  if (!Array.isArray(raw.retainedResearch)) return invalid()
+  const retained = new Set<string>()
+  for (const id of raw.retainedResearch) {
+    if (typeof id !== 'string' || !owns(purchases, id) || retained.has(id)) return invalid()
+    retained.add(id)
+  }
+  if (unmet.some(id => !retained.has(id))) {
     return invalid('Research prerequisites are missing.')
   }
+  game.retainedResearch = [...retained]
   return game
 }
 

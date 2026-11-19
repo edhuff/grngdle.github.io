@@ -16,8 +16,8 @@ export type Roll = {
 }
 export type Settings = { animations: boolean; reducedEffects: boolean; showBadgeOdds: boolean }
 export type Game = {
-  schema: 3; lab: boolean; balance: bigint; lifetime: bigint; rolls: number
-  purchases: Purchases; discoveries: Partial<Record<BadgeFamily, number>>
+  schema: 4; lab: boolean; balance: bigint; lifetime: bigint; rolls: number
+  purchases: Purchases; retainedResearch: string[]; discoveries: Partial<Record<BadgeFamily, number>>
   distribution: Record<Rarity, number>
   recent: Roll[]; rarest: Roll[]; highest: Roll[]; largest: Roll[]
   settings: Settings
@@ -25,7 +25,7 @@ export type Game = {
 
 export function newGame(lab = false): Game {
   return {
-    schema: 3, lab, balance: 0n, lifetime: 0n, rolls: 0, purchases: {}, discoveries: {},
+    schema: 4, lab, balance: 0n, lifetime: 0n, rolls: 0, purchases: {}, retainedResearch: [], discoveries: {},
     distribution: Object.fromEntries(rarities.map(tier => [tier.name, 0])) as Game['distribution'],
     recent: [], rarest: [], highest: [], largest: [],
     settings: { animations: true, reducedEffects: false, showBadgeOdds: false },
@@ -36,6 +36,7 @@ export function progress(game: Game) {
   return { purchases: game.purchases, families: Object.keys(game.discoveries).length }
 }
 
+export const recentRollLimit = 90
 const recordLimit = 12
 const compareBig = (a: bigint, b: bigint) => a === b ? 0 : a > b ? -1 : 1
 const insert = (existing: Roll[], roll: Roll, compare: (a: Roll, b: Roll) => number) =>
@@ -55,7 +56,7 @@ export function manualRoll(game: Game, word?: WordSource): Game {
   return {
     ...game, rolls: roll.index, balance: game.balance + roll.earned, lifetime: game.lifetime + roll.earned, discoveries,
     distribution: { ...game.distribution, [tier]: game.distribution[tier] + 1 },
-    recent: [roll, ...game.recent].slice(0, effects.history),
+    recent: [roll, ...game.recent].slice(0, recentRollLimit),
     rarest: insert(game.rarest, roll, (a, b) => compareProbability(a.probability, b.probability)),
     highest: insert(game.highest, roll, (a, b) => compareBig(a.earned, b.earned)),
     largest: value === null ? game.largest : insert(game.largest, roll, (a, b) => compareBig(magnitude(a.expression)!, magnitude(b.expression)!)),
@@ -76,8 +77,9 @@ export function refund(game: Game, id: string): Game {
   const purchases = { ...game.purchases }
   delete purchases[id]
   const nextProgress = { ...progress(game), purchases }
-  if (Object.keys(purchases).some(key => !meets(researchById.get(key)?.requires, nextProgress, game.lab))) return game
+  // A finished study stays unlocked if its specialization is later refunded.
+  const retainedResearch = Object.keys(purchases).filter(key => !meets(researchById.get(key)?.requires, nextProgress, game.lab))
   let returned = 0n
   for (let level = 0; level < rank; level++) returned += rankCost(item, level, game.lab)
-  return { ...game, purchases, balance: game.balance + returned }
+  return { ...game, purchases, retainedResearch, balance: game.balance + returned }
 }

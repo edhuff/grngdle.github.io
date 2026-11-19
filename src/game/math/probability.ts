@@ -14,18 +14,18 @@ export function compareProbability(a: Fraction, b: Fraction): number {
 }
 
 export const rarities = [
-  { name: 'Common', odds: 0n, color: '#a9aec5' },
-  { name: 'Uncommon', odds: 2_000_000n, color: '#7de0af' },
-  { name: 'Rare', odds: 10_000_000n, color: '#7bc8ff' },
-  { name: 'Epic', odds: 100_000_000n, color: '#bc9aff' },
-  { name: 'Legendary', odds: 1_000_000_000n, color: '#ffce78' },
-  { name: 'Mythic', odds: 100_000_000_000n, color: '#ff8ab8' },
-  { name: 'Transcendent', odds: 10n ** 16n, color: '#65eadb' },
-  { name: 'Singularity', odds: 10n ** 23n, color: '#ff9b83' },
+  { name: 'Common', odds: 1n, color: '#a9aec5' },
+  { name: 'Uncommon', odds: 10n, color: '#7de0af' },
+  { name: 'Rare', odds: 100n, color: '#7bc8ff' },
+  { name: 'Epic', odds: 1000n, color: '#bc9aff' },
+  { name: 'Legendary', odds: 10_000n, color: '#ffce78' },
+  { name: 'Mythic', odds: 100_000n, color: '#ff8ab8' },
+  { name: 'Transcendent', odds: 1_000_000n, color: '#65eadb' },
+  { name: 'Singularity', odds: 100_000_000n, color: '#ff9b83' },
 ] as const
 export type Rarity = typeof rarities[number]['name']
 
-export function rarityOf(probability: Fraction) {
+export function epRarity(probability: Fraction) {
   return rarities.findLast(tier => probability.numerator * tier.odds <= probability.denominator) ?? rarities[0]
 }
 
@@ -38,10 +38,3 @@ export function multiplyProbability(a: Fraction, b: Fraction): Fraction {
 }
 
 export type EventOdds = { label: string; scope: 'Classical integers' | 'Current pool'; probability: Fraction }
-
-// Thresholds for observed attributes, separate from legacy exact-outcome rankings.
-export function eventRarity(probability: Fraction) {
-  const thresholds = [1n, 10n, 100n, 1000n, 10_000n, 100_000n, 1_000_000n, 100_000_000n]
-  const index = thresholds.findLastIndex(bound => probability.numerator * bound <= probability.denominator)
-  return rarities[Math.max(0, index)]
-}

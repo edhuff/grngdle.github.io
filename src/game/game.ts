@@ -1,7 +1,8 @@
 import { badgeRule, type Badge, type BadgeFamily, type BadgeId } from './attributes'
-import { rarityEvent, rewards } from './economy'
+import { evaluateRewards, rollEvent } from './economy'
+import { epOdds, type EPOdds } from './ep-rarity'
 import { generate, type GeneratorOptions, type Source, type WordSource } from './generator'
-import { compareProbability, eventRarity, magnitude, rarities, rarityOf, type EventOdds, type Expression, type Fraction, type Rarity } from './math'
+import { compareProbability, epRarity, magnitude, rarities, type EventOdds, type Expression, type Fraction, type Rarity } from './math'
 import { effectsOf, owns, purchaseCost, rankCost, researchById, researchStatus, meets, type Purchases } from './research'
 
 export type Roll = {
@@ -11,27 +12,30 @@ export type Roll = {
   generatorVersion: number
   source: Source
   generation?: { configuration: GeneratorOptions; ticket: bigint; event: EventOdds }
+  epOdds?: EPOdds
   badges: Badge[]
   earned: bigint
   bonus: bigint
 }
 export type Settings = { animations: boolean; reducedEffects: boolean; showBadgeOdds: boolean }
 export type Game = {
-  schema: 6; lab: boolean; balance: bigint; lifetime: bigint; rolls: number
+  schema: 7; lab: boolean; balance: bigint; lifetime: bigint; rolls: number
   purchases: Purchases; retainedResearch: string[]; discoveries: Partial<Record<BadgeFamily, number>>
   payments: Record<string, bigint[]>; bookmarks: string[]; legacyRange: boolean
   observations: Partial<Record<BadgeId, { count: number; first: number }>>
   sourceCounts: Partial<Record<Source, number>>
   distribution: Record<Rarity, number>
+  unratedRolls: number
   recent: Roll[]; rarest: Roll[]; highest: Roll[]; largest: Roll[]
   settings: Settings
 }
 
 export function newGame(lab = false): Game {
   return {
-    schema: 6, lab, balance: 0n, lifetime: 0n, rolls: 0, purchases: {}, retainedResearch: [], discoveries: {},
+    schema: 7, lab, balance: 0n, lifetime: 0n, rolls: 0, purchases: {}, retainedResearch: [], discoveries: {},
     payments: {}, bookmarks: [], legacyRange: false, observations: {}, sourceCounts: {},
     distribution: Object.fromEntries(rarities.map(tier => [tier.name, 0])) as Game['distribution'],
+    unratedRolls: 0,
     recent: [], rarest: [], highest: [], largest: [],
     settings: { animations: true, reducedEffects: false, showBadgeOdds: false },
   }
@@ -59,16 +63,12 @@ function recordMagnitude(roll: Roll) {
 }
 
 export function rollRarity(roll: Roll) {
-  return roll.generation ? eventRarity(roll.generation.event.probability) : rarityOf(roll.probability)
+  return roll.epOdds ? epRarity(roll.epOdds.probability) : null
 }
 
 function compareRarity(a: Roll, b: Roll) {
-  const tier = rarities.indexOf(rollRarity(b)) - rarities.indexOf(rollRarity(a))
-  if (tier) return tier
-  const scope = (roll: Roll) => !roll.generation ? 2 : roll.generation.event.scope === 'Current pool' ? 0 : 1
-  return scope(a) - scope(b) || compareProbability(
-    a.generation?.event.probability ?? a.probability, b.generation?.event.probability ?? b.probability,
-  )
+  if (a.epOdds && b.epOdds) return compareProbability(a.epOdds.probability, b.epOdds.probability)
+  return Number(!a.epOdds) - Number(!b.epOdds)
 }
 
 const rankings: Record<'rarest' | 'highest' | 'largest', (a: Roll, b: Roll) => number> = {
@@ -84,9 +84,10 @@ export function sortRecords(rows: Roll[], category: keyof typeof rankings) {
 export function manualRoll(game: Game, word?: WordSource): Game {
   const effects = effectsOf(game.purchases, game.legacyRange)
   const { expression, probability, version, source, configuration, ticket, event } = generate(effects.generator, word)
-  const reward = rewards(expression, game.purchases, effects, source)
-  const generation = { configuration, ticket, event: rarityEvent(source, reward.badges, event, configuration.terminal) }
-  const roll: Roll = { index: game.rolls + 1, expression, probability, generatorVersion: version, source, generation, ...reward }
+  const reward = evaluateRewards(expression, effects, source)
+  const generation = { configuration, ticket, event: rollEvent(source, reward.badges, event, configuration.terminal) }
+  const payoutOdds = epOdds(reward.earned, effects)
+  const roll: Roll = { index: game.rolls + 1, expression, probability, generatorVersion: version, source, generation, ...reward, epOdds: payoutOdds }
   const discoveries = { ...game.discoveries }
   for (const family of new Set(roll.badges.map(item => badgeRule(item.id).family))) {
     discoveries[family] = (discoveries[family] ?? 0) + 1
@@ -98,7 +99,7 @@ export function manualRoll(game: Game, word?: WordSource): Game {
   }
   const sourceCounts = { ...game.sourceCounts, [source]: (game.sourceCounts[source] ?? 0) + 1 }
   const { capacities } = effects
-  const tier = rollRarity(roll).name
+  const tier = epRarity(payoutOdds.probability).name
   const value = recordMagnitude(roll)
   return {
     ...game, rolls: roll.index, balance: game.balance + roll.earned, lifetime: game.lifetime + roll.earned, discoveries, observations, sourceCounts,

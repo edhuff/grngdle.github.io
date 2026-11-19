@@ -1,13 +1,22 @@
 import type { CSSProperties } from 'react'
 import { badgeReference, badgeRule, type Badge } from '../game/attributes'
+import type { EPOdds } from '../game/ep-rarity'
 import { integerText, oddsText, type rarities } from '../game/math'
 
 export function Mark() {
   return <img className="brand-mark" src={import.meta.env.BASE_URL + 'pages-assets/mark.svg'} alt="" width="29" height="29" />
 }
 
-export function RarityLabel({ tier }: { tier: typeof rarities[number] }) {
-  return <span className="rarity" style={{ '--rarity': tier.color } as CSSProperties}>{tier.name}</span>
+export function RarityLabel({ tier }: { tier: typeof rarities[number] | null }) {
+  return <span className="rarity" style={{ '--rarity': tier?.color ?? 'var(--subtle)' } as CSSProperties}>{tier?.name ?? 'Unrated'}</span>
+}
+
+const percentage = new Intl.NumberFormat('en', { style: 'percent', maximumSignificantDigits: 3 })
+export function epOddsText(odds: EPOdds) {
+  const { numerator, denominator } = odds.probability
+  const base = 10n ** 16n
+  const scaled = Number(numerator * base / denominator) / Number(base)
+  return (odds.method === 'estimated' ? '≈' : '') + (scaled > 0 ? percentage.format(scaled) : '<0.00000000000001%')
 }
 
 export const familyNames = {

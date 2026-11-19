@@ -6,6 +6,8 @@ A manual RNG collection game about the mathematics of large numbers. Start with 
 
 Open [gRNGdle](https://edhuff.github.io/grngdle.github.io/). Click **Roll** or press **Space** for one draw. Research spends earned EP and changes what future manual rolls can produce. Collection and Statistics can display additional analyses, observations, and records as you research them.
 
+Rarity is the chance of earning the displayed EP or more with the research active for that roll. The starting pool has exact EP odds. Large unlocked pools show estimates with an approximation symbol. Collection also shows the odds of the specific number or expression.
+
 In Research, drag to pan or scroll to zoom around the pointer. **Eras** opens the global view. The map starts with Yield Calibration and reveals the immediate successors of purchased studies within open eras. Selecting a study opens its details in place. Use **Show on map** to locate a study outside the current view. Search covers revealed studies and can filter by discipline, affordability, and bookmarks. Major breakthroughs and doctrine refunds ask for confirmation.
 
 GitHub Pages serves the static site from the root of `main`. Run `npm run build:pages` and commit the generated `index.html` and `pages-assets/` with source changes. Make HTML edits in `src/index.html`. Browser saves are scoped to the site origin, and Settings supports export, import, and reset.
@@ -26,7 +28,7 @@ Open the address Vite prints. `npm run build` produces a static site in `dist/`.
 - **Classical Era.** Seven clusters cover number theory, digit patterns, economics, probability, discovery, analysis, and convergence. The gateway dependency map has 43 study candidates before the breakthrough, with alternate final reviews. Beyond a Million initially opens a band from 1,000,001 through 10,000,000 at 13% weight along the direct route.
 - **Later eras.** Research widens the integer range and opens exact arithmetic, powers, towers, tetration, hyperoperations, Conway chains, ordinal-indexed hierarchies, Busy Beaver, and Ackermann–Péter. Later clusters add sample weights, operand and structure limits, inspection tools, and EP effects.
 - **Doctrines.** Magnitude, Rarity, and Economy each have 20 studies. One doctrine can be active at a time. Refunds return the prices actually paid for affected doctrine studies, including discounts. Permanent mathematical research and recorded discoveries survive a change.
-- **Saves.** Schema 6 records exact EP payments, observed badge and generator counts, and bookmarks. Earlier saves retain purchased mathematical studies and recorded history. Players who already had the old expansion keep its through-one-trillion range. Where earlier saves did not track specific observations, their new counters start with the retained rolls.
+- **Saves.** Schema 7 records EP rarity alongside each new roll. Earlier saves retain purchased mathematical studies and recorded history. Rolls made before schema 7 are shown as unrated. Players who already had the old expansion keep its through-one-trillion range. Where earlier saves did not track specific observations, their new counters start with the retained rolls.
 
 See [MATHEMATICS.md](MATHEMATICS.md) for mathematical conventions and computational limits and [ROADMAP.md](ROADMAP.md) for exact era counts, simulation results, and remaining work.
 
@@ -37,6 +39,7 @@ See [MATHEMATICS.md](MATHEMATICS.md) for mathematical conventions and computatio
 | `src/game/research.ts` and `src/game/research/` | Authored studies, AND/OR/count and discovery or EP prerequisites, doctrine exclusivity, rank prices, and effect folding |
 | `src/game/math/` and `src/game/generation/` | Symbolic ASTs, bounded evaluation and comparisons, configured sampling, exact probabilities, and replay |
 | `src/game/attributes.ts`, `research-properties.ts`, and `economy.ts` | Integer and structural badges, conditional Classical badge odds, and manual-roll payouts |
+| `src/game/ep-rarity.ts` | Exact and sampled payout distributions and EP rarity odds |
 | `src/game/game.ts` and `save.ts` | Purchases and refunds, research payments, roll records, migrations, and validation |
 | `src/ui/` | Full-field viewport-culled atlas, roll chamber, collections, mathematical inspection, and statistics |
 
@@ -52,4 +55,4 @@ npm run dev:lab -- --port 5174
 npm run test:browser -- http://localhost:5173 http://localhost:5174
 ```
 
-The balance arguments are base samples, Classical trials, active seconds per manual roll, and trials continuing after Classical. The lab lowers prices and discovery requirements, uses an isolated save, and still requires one action per roll. Offline simulations are command-line tools. Use `npm run measure:badges` to regenerate exact Classical reference frequencies after changing a badge predicate. Set `CHROMIUM_PATH` if Chromium lives outside `/usr/bin/chromium`.
+The balance arguments are base samples, Classical trials, active seconds per manual roll, and trials continuing after Classical. The lab lowers prices and discovery requirements, uses an isolated save, and still requires one action per roll. Offline simulations are command-line tools. Use `npm run measure:badges` to regenerate Classical badge frequencies and combinations after changing a badge predicate. Set `CHROMIUM_PATH` if Chromium lives outside `/usr/bin/chromium`.

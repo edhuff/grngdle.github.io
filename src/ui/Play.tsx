@@ -2,12 +2,12 @@ import { useEffect, useMemo, type CSSProperties } from 'react'
 import { ArrowUpRight, ChevronDown } from 'lucide-react'
 import { badgeRule } from '../game/attributes'
 import { progress, rollRarity, type Game } from '../game/game'
-import { compactOddsText, integerText, notation, oddsText } from '../game/math'
+import { integerText, notation, oddsText } from '../game/math'
 import { milestones } from '../game/progression'
 import { eras, owns, purchaseCost, researchById, researchEra, researchStatus, revealedResearch, startingStudy } from '../game/research'
-import { BadgeCards, RarityLabel } from './shared'
+import { BadgeCards, epOddsText, RarityLabel } from './shared'
 
-type Props = { game: Game; rolling: boolean; onRoll: () => void; onResearch: (id?: string) => void }
+type Props = { game: Game; rolling: boolean; preparingOdds: boolean; onRoll: () => void; onResearch: (id?: string) => void }
 
 function RollNumber({ text, rolling }: { text: string; rolling: boolean }) {
   const numberStyle = {
@@ -29,12 +29,12 @@ function RollNumber({ text, rolling }: { text: string; rolling: boolean }) {
   </div>
 }
 
-export function Play({ game, rolling, onRoll, onResearch }: Props) {
+export function Play({ game, rolling, preparingOdds, onRoll, onResearch }: Props) {
   const roll = game.recent[0]
   const era = researchEra(game.purchases)
   const title = roll ? notation(roll.expression) : '—'
   const visibleRoll = rolling ? game.recent[1] : roll
-  const rarity = visibleRoll ? rollRarity(visibleRoll) : undefined
+  const rarity = visibleRoll ? rollRarity(visibleRoll) : null
   const milestoneId = milestones.find(id => !owns(game.purchases, id))
   const revealed = useMemo(() => revealedResearch(game.purchases), [game.purchases])
   const nextId = owns(game.purchases, startingStudy) ? milestoneId : startingStudy
@@ -65,19 +65,26 @@ export function Play({ game, rolling, onRoll, onResearch }: Props) {
         <RollNumber key={roll?.index} text={title} rolling={rolling} />
         <div className="result-meta" aria-hidden="true">
           {visibleRoll ? <>
-            <RarityLabel tier={rollRarity(visibleRoll)} />
-            <span title={oddsText(visibleRoll.probability)}>{compactOddsText(visibleRoll.probability)}</span>
+            <RarityLabel tier={rarity} />
+            {visibleRoll.epOdds && <span title={
+              (visibleRoll.epOdds.method === 'estimated' ? 'Estimated chance' : 'Chance') +
+              ' of earning this much EP or more · ' + oddsText(visibleRoll.epOdds.probability)
+            }>
+              {epOddsText(visibleRoll.epOdds)} EP odds
+            </span>}
             <strong className="earned">+{integerText(visibleRoll.earned)} EP</strong>
           </> : <span>{rolling ? '\u00a0' : 'Roll to start'}</span>}
         </div>
         <span className="visually-hidden" role="status">{!rolling && visibleRoll
-          ? title + '. ' + rarity?.name + '. Exact roll odds ' + compactOddsText(visibleRoll.probability) + '. Earned ' + integerText(visibleRoll.earned) + ' EP.'
+          ? title + '. ' + (rarity?.name ?? 'Unrated') + '. Earned ' + integerText(visibleRoll.earned) + ' EP.' +
+            (visibleRoll.epOdds ? ' Chance of earning this much EP or more ' + epOddsText(visibleRoll.epOdds) + '.' : '')
           : ''}</span>
       </div>
 
-      <button className="roll-button" onClick={onRoll} aria-label="Roll" aria-keyshortcuts="Space" aria-disabled={rolling || undefined}
+      <button className="roll-button" onClick={onRoll} aria-label="Roll" aria-keyshortcuts="Space" aria-disabled={rolling || preparingOdds || undefined}
+        aria-busy={preparingOdds || undefined}
         onKeyDown={event => { if (event.repeat) event.preventDefault() }}>
-        <span>Roll</span><kbd aria-hidden="true">Space</kbd>
+        <span>{preparingOdds ? 'Preparing EP odds…' : 'Roll'}</span><kbd aria-hidden="true">Space</kbd>
       </button>
     </section>
 

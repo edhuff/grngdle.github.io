@@ -12,7 +12,7 @@ import { analyze } from '../game/math/analysis'
 import { type Expression, compactOddsText, fraction, integerText, notation, oddsText, rarities } from '../game/math'
 import { milestones } from '../game/progression'
 import { classicalRoute, clusterProgress, effectsOf, researchById, researchEra, owns, eras, revealedResearch } from '../game/research'
-import { BadgeCards, Empty, familyNames, RarityLabel } from './shared'
+import { BadgeCards, Empty, epOddsText, familyNames, RarityLabel } from './shared'
 
 const collections = [
   { id: 'rarest', name: 'Rarest' }, { id: 'highest', name: 'Highest EP' }, { id: 'largest', name: 'Largest exact integers' }, { id: 'recent', name: 'Recent' },
@@ -107,8 +107,11 @@ function RollDetail({ roll, game }: { roll: Roll; game: Game }) {
     <div className="record-meta"><RarityLabel tier={rollRarity(roll)} /><span className="earned">+{integerText(roll.earned)} EP</span></div>
     <p className="detail-subtitle">{expressions ? 'Odds for this ordered expression.' : 'Exact outcome odds for this integer.'} Generator v{roll.generatorVersion}.</p>
     <div className="inspector"><strong>Roll inspector</strong>
+      {roll.epOdds ? <span>Chance of earning {integerText(roll.earned)} EP or more · {epOddsText(roll.epOdds)}
+        {roll.epOdds.method === 'estimated' ? ' (estimated)' : ' (' + oddsText(roll.epOdds.probability) + ')'}</span>
+        : <span>Recorded before EP-based rarity</span>}
       <span>Exact {expressions ? 'expression' : 'integer'} odds {oddsText(roll.probability)}</span>
-      {event && <span>Rarity event · {event.label} · {event.scope} · {oddsText(event.probability)}</span>}
+      {event && <span>Roll event · {event.label} · {event.scope} · {oddsText(event.probability)}</span>}
       {equivalent && <span title={equivalent.status === 'unknown' ? oddsText(equivalent.atLeast) : undefined}>Equivalent-value odds {equivalent.status === 'exact' ? oddsText(equivalent.probability) : 'unknown (at least ' + compactOddsText(equivalent.atLeast) + ')'}</span>}
       <span>Exact value {value}{lower && ' · Proven lower bound ' + lower}</span>
       <span>Depth {facts.depth} · AST nodes {facts.nodes}{facts.ordinalDepth === null ? '' : ' · Ordinal depth ' + facts.ordinalDepth}</span>
@@ -147,6 +150,7 @@ export function Statistics({ game }: { game: Game }) {
   const total = bands.reduce((sum, band) => sum + band.weight, 0n)
   const completed = [...path].filter(id => owns(game.purchases, id)).length
   const revealed = revealedResearch(game.purchases)
+  const ratedRolls = game.rolls - game.unratedRolls
   const stats = [
     { name: 'Manual rolls', value: game.rolls.toLocaleString() },
     { name: 'Lifetime EP', value: integerText(game.lifetime) },
@@ -159,9 +163,10 @@ export function Statistics({ game }: { game: Game }) {
     <div className="statistics-layout">
       <section className="stats-panel">
         <header className="section-title"><h2>Rarity distribution</h2></header>
+        {!!game.unratedRolls && <p className="detail-subtitle">{game.unratedRolls.toLocaleString()} rolls recorded before EP-based rarity.</p>}
         <div className="chart-list">{rarities.map(tier => <div key={tier.name}>
           <span style={{ color: tier.color }}>{tier.name}</span>
-          <div className="meter"><i style={{ background: tier.color, width: (game.rolls ? game.distribution[tier.name] / game.rolls * 100 : 0) + '%' }} /></div>
+          <div className="meter"><i style={{ background: tier.color, width: (ratedRolls ? game.distribution[tier.name] / ratedRolls * 100 : 0) + '%' }} /></div>
           <strong>{game.distribution[tier.name].toLocaleString()}</strong>
         </div>)}</div>
       </section>

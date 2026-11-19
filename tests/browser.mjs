@@ -26,9 +26,11 @@ try {
   await page.locator('.digit-reel').first().waitFor()
   assert.equal((await saved()).rolls, 1)
   assert.equal((await saved()).recent[0].probability.denominator, '1000001')
+  assert.equal((await saved()).recent[0].epOdds.method, 'exact')
   await page.locator('.digit-reel').first().waitFor({ state: 'detached' })
   assert.equal((await saved()).rolls, 1)
   assert.match(await page.getByRole('status').textContent(), /Earned \d+ EP/)
+  assert.match(await page.getByRole('status').textContent(), /Chance of earning this much EP or more/)
 
   await nav('Settings').click()
   await page.getByRole('checkbox', { name: /Animated roll/ }).uncheck()
@@ -272,6 +274,28 @@ try {
     assert.equal(updatedLab.purchases.expansion, 1)
     assert.equal(updatedLab.purchases.arithmetic, 1)
     assert.equal(await lab.evaluate(() => localStorage.getItem('grngdle.save.production')), null)
+
+    const advanced = purchase(fixture, 'expansion')
+    assert.equal(advanced.purchases.expansion, 1)
+    const productionPayments = Object.fromEntries(Object.entries(advanced.purchases).map(([id, rank]) => [
+      id, Array.from({ length: rank }, (_, level) => rankCost(researchById.get(id), level)),
+    ]))
+    const spend = Object.values(productionPayments).flat().reduce((sum, price) => sum + price, 0n)
+    const advancedPage = await browser.newPage()
+    advancedPage.on('pageerror', error => faults.push(String(error)))
+    const workers = []
+    advancedPage.on('worker', worker => workers.push(worker.url()))
+    await advancedPage.addInitScript(save => localStorage.setItem('grngdle.save.production', save), exportSave({
+      ...advanced, lab: false, payments: productionPayments, lifetime: advanced.balance + spend,
+    }))
+    await advancedPage.goto(process.argv[2] ?? 'http://localhost:5173', { waitUntil: 'networkidle' })
+    await advancedPage.getByRole('button', { name: 'Roll', exact: true }).click()
+    assert(workers.some(url => /payout-worker/.test(url)))
+    const advancedResult = await advancedPage.evaluate(() => JSON.parse(localStorage.getItem('grngdle.save.production')))
+    assert.equal(advancedResult.rolls, advanced.rolls + 1)
+    assert.equal(advancedResult.recent[0].epOdds.method, 'estimated')
+    await advancedPage.close()
+
     const late = await browser.newPage({ viewport: { width: 390, height: 844 } })
     late.on('pageerror', error => faults.push(String(error)))
     let lateGame = newGame(true)
@@ -302,6 +326,7 @@ try {
     assert.equal(await late.getByTestId('roll-number').getAttribute('aria-label'), 'S(10)')
     await late.getByRole('navigation').getByRole('button', { name: 'Collection' }).click()
     await late.getByRole('button', { name: 'Recent', exact: true }).click()
+    await late.getByText(/Chance of earning .* EP or more .*estimated/).waitFor()
     await late.getByText(/Exact expression odds/).waitFor()
     await late.getByText(/Equivalent-value odds unknown/).waitFor()
     await late.getByText(/Exact value Unknown · Proven lower bound 107/).waitFor()

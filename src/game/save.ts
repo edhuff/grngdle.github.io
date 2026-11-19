@@ -1,9 +1,9 @@
 import { badgeIds, badgeRule, type Badge, type BadgeFamily, type BadgeId } from './attributes'
-import { newGame, progress, sortRecords, type Game, type Roll } from './game'
-import { rarityEvent } from './economy'
+import { newGame, progress, rollRarity, sortRecords, type Game, type Roll } from './game'
+import { rollEvent } from './economy'
 import { advancedFamilies, checkParameters, type AdvancedFamily, type GeneratorOptions } from './generation/config'
 import { CLASSICAL_MAX, EXPANDED_MAX, GENERATOR_VERSION, VAST_MAX, replay, sourceNames, type Source } from './generator'
-import { depth, fraction, magnitude, rarities, type Expression, type Fraction } from './math'
+import { compareProbability, depth, fraction, magnitude, rarities, type Expression, type Fraction } from './math'
 import { effectsOf, meets, originalResearch, owns, rankCost, researchById, specializationOf } from './research'
 
 export const maxSaveSize = 3_000_000
@@ -98,7 +98,7 @@ function legacyExpression(raw: unknown, source: Source): Expression {
   return expression
 }
 
-function rollOf(value: unknown, rolls: number, lifetime: bigint): Roll {
+function rollOf(value: unknown, rolls: number, lifetime: bigint, unratedRolls: number, ratedSchema: boolean): Roll {
   const item = object(value)
   const source = item.source as Source
   if (typeof source !== 'string' || !Object.hasOwn(sourceNames, source)) return invalid()
@@ -135,10 +135,22 @@ function rollOf(value: unknown, rolls: number, lifetime: bigint): Roll {
   const earned = decimal(item.earned)
   const bonus = decimal(item.bonus)
   if (earned > lifetime || earned !== bonus + badges.reduce((sum, badge) => sum + badge.reward, 0n)) return invalid()
-  const generation = evidence && { configuration: evidence.configuration, ticket: evidence.ticket, event: rarityEvent(source, badges, evidence.event, evidence.configuration.terminal) }
+  const generation = evidence && { configuration: evidence.configuration, ticket: evidence.ticket, event: rollEvent(source, badges, evidence.event, evidence.configuration.terminal) }
   if (generation && !matchesEncoded(object(item.generation).event, generation.event)) return invalid()
-  return { index: count(item.index, 1, rolls), expression, probability, source, generatorVersion,
-    ...(generation ? { generation } : {}), badges, earned, bonus }
+  const index = count(item.index, 1, rolls)
+  let epOdds: Roll['epOdds']
+  if (index > unratedRolls) {
+    if (!generation) return invalid()
+    const rawOdds = object(item.epOdds)
+    const method = rawOdds.method
+    if (method !== 'exact' && method !== 'estimated') return invalid()
+    const rawTail = object(rawOdds.probability)
+    const tail = fraction(decimal(rawTail.numerator), decimal(rawTail.denominator))
+    if (tail.numerator === 0n || tail.numerator > tail.denominator || (method === 'exact' && compareProbability(tail, probability) < 0)) return invalid()
+    epOdds = { method, probability: tail }
+  } else if (ratedSchema && item.epOdds !== undefined) return invalid()
+  return { index, expression, probability, source, generatorVersion,
+    ...(generation ? { generation } : {}), badges, earned, bonus, ...(epOdds ? { epOdds } : {}) }
 }
 
 const encode = (_: string, value: unknown) => typeof value === 'bigint' ? value.toString() : value
@@ -149,7 +161,7 @@ export function exportSave(game: Game) {
 
 function migrate(raw: Record<string, unknown>) {
   if (raw.schema === 1) return { ...raw, settings: { ...object(raw.settings), showBadgeOdds: false } }
-  if (raw.schema !== 2 && raw.schema !== 3 && raw.schema !== 4 && raw.schema !== 5 && raw.schema !== 6) return invalid('This save version is unsupported.')
+  if (raw.schema !== 2 && raw.schema !== 3 && raw.schema !== 4 && raw.schema !== 5 && raw.schema !== 6 && raw.schema !== 7) return invalid('This save version is unsupported.')
   return raw
 }
 
@@ -168,7 +180,8 @@ export function importSave(text: string, lab = false): Game {
   const purchases: Game['purchases'] = {}
   let savedSpent = 0n
   let currentSpent = 0n
-  const currentSchema = raw.schema === 6
+  const ratedSchema = raw.schema === 7
+  const currentSchema = ratedSchema || raw.schema === 6
   const payments: Game['payments'] = {}
   const rawPayments = currentSchema ? object(raw.payments) : {}
   const isDoctrine = (id: string) => researchById.get(id)?.effects.some(effect => effect.kind === 'specialize')
@@ -221,13 +234,19 @@ export function importSave(text: string, lab = false): Game {
   if (rolls && discoveries.parity === undefined) return invalid()
   const distribution = newGame(lab).distribution
   const rawDistribution = object(raw.distribution)
-  for (const tier of rarities) distribution[tier.name] = count(rawDistribution[tier.name], 0, rolls)
-  if (Object.values(distribution).reduce((sum, entry) => sum + entry, 0) !== rolls) return invalid()
+  const unratedRolls = ratedSchema ? count(raw.unratedRolls, 0, rolls) : rolls
+  let recordedRolls = 0
+  for (const tier of rarities) {
+    const entries = count(rawDistribution[tier.name], 0, rolls)
+    recordedRolls += entries
+    if (ratedSchema) distribution[tier.name] = entries
+  }
+  if (recordedRolls !== (ratedSchema ? rolls - unratedRolls : rolls)) return invalid()
   const seen = new Map<number, string>()
   const readRolls = (key: string, cap: number) => {
     const list = raw[key]
     if (!Array.isArray(list) || list.length > cap || (rolls > 0 && list.length === 0)) return invalid()
-    const decoded = list.map(item => rollOf(item, rolls, lifetime))
+    const decoded = list.map(item => rollOf(item, rolls, lifetime, unratedRolls, ratedSchema))
     if (new Set(decoded.map(item => item.index)).size !== decoded.length) return invalid()
     for (const roll of decoded) {
       const serialized = JSON.stringify(roll, encode)
@@ -249,7 +268,10 @@ export function importSave(text: string, lab = false): Game {
   const storedRolls = new Map([...recent, ...rarest, ...highest, ...largest].map(roll => [roll.index, roll]))
   const observed: Game['observations'] = {}
   const sources: Game['sourceCounts'] = {}
+  const ratedCounts = newGame(lab).distribution
   for (const roll of storedRolls.values()) {
+    const tier = rollRarity(roll)
+    if (tier && ++ratedCounts[tier.name] > distribution[tier.name]) return invalid()
     sources[roll.source] = (sources[roll.source] ?? 0) + 1
     for (const badge of roll.badges) {
       const old = observed[badge.id]
@@ -294,8 +316,8 @@ export function importSave(text: string, lab = false): Game {
     Object.assign(sourceCounts, sources)
   }
   const game: Game = {
-    schema: 6, lab, rolls, lifetime, balance: lifetime - currentSpent, purchases, payments, retainedResearch: [],
-    legacyRange, bookmarks, observations, sourceCounts, discoveries, distribution, recent, rarest, highest, largest,
+    schema: 7, lab, rolls, lifetime, balance: lifetime - currentSpent, purchases, payments, retainedResearch: [],
+    legacyRange, bookmarks, observations, sourceCounts, discoveries, distribution, unratedRolls, recent, rarest, highest, largest,
     settings: { animations: bool(settings.animations), reducedEffects: bool(settings.reducedEffects), showBadgeOdds: bool(settings.showBadgeOdds) },
   }
   const current = progress(game)

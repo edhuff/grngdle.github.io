@@ -5,7 +5,7 @@ import { researchProperties } from '../src/game/research-properties'
 import { rewards } from '../src/game/economy'
 import { manualRoll, newGame, progress, purchase, refund, rollRarity } from '../src/game/game'
 import { CLASSICAL_MAX, DISTRIBUTION_TOTAL, VAST_MAX, generate, generatorBands, seededWords, uniformBelow } from '../src/game/generator'
-import { depth, fraction, integer, magnitude, notation, rarityOf } from '../src/game/math'
+import { depth, fraction, integer, magnitude, notation } from '../src/game/math'
 import { milestones } from '../src/game/progression'
 import { classicalRoute, dependencies, effectsOf, meets, rankCost, research, researchById, researchRoute, researchStatus, startingStudy, validateResearch, type ResearchNode } from '../src/game/research'
 import { exportSave, importSave } from '../src/game/save'
@@ -18,7 +18,6 @@ test('classical generator includes both endpoints and rejects biased overflow dr
   const roll = generate(options, () => words.shift()!)
   assert.deepEqual(roll.expression, integer(CLASSICAL_MAX))
   assert.deepEqual(roll.probability, { numerator: 1n, denominator: 1_000_001n })
-  assert.equal(rarityOf(roll.probability).name, 'Common')
   assert.equal(words.length, 0)
 })
 
@@ -75,7 +74,8 @@ test('one manual invocation records one roll and credits exactly the badge and r
   assert.equal(rolled.balance, 13n)
   assert.equal(rolled.lifetime, rolled.recent[0].earned)
   assert.equal(rolled.distribution.Legendary, 1)
-  assert.equal(rollRarity(rolled.recent[0]).name, 'Legendary')
+  assert.equal(rollRarity(rolled.recent[0])?.name, 'Legendary')
+  assert.deepEqual(rolled.recent[0].epOdds, { method: 'exact', probability: fraction(60n, 1_000_001n) })
   assert.equal(rolled.recent[0].generation?.event.label, 'Fibonacci')
   assert.equal(rolled.discoveries.prime, 1)
   const bonus = rewards(integer(13n), { yield: 1, compound: 1 })
@@ -210,7 +210,7 @@ test('versioned saves round-trip records, validate purchases, and isolate develo
   assert.deepEqual(importSave(saved), game)
   assert.throws(() => importSave(saved, true), /different game mode/)
   assert.throws(() => importSave('{'), /JSON/)
-  assert.throws(() => importSave(saved.replace('"schema":6', '"schema":55')), /unsupported/)
+  assert.throws(() => importSave(saved.replace('"schema":7', '"schema":55')), /unsupported/)
   assert.throws(() => importSave(saved.replace('"purchases":{', '"purchases":{"__proto__":1,')), /Malformed/)
   assert.throws(() => importSave(saved.replace(/"balance":"\d+"/, '"balance":"0"')), /Research spending/)
   const altered = JSON.parse(saved)
@@ -234,7 +234,7 @@ test('legacy saves keep research and history and receive a rebate on old prices'
   legacy.schema = 2
   legacy.balance = String(game.lifetime - oldSpending)
   const migrated = importSave(JSON.stringify(legacy))
-  assert.deepEqual(migrated.recent, game.recent)
+  assert.deepEqual(migrated.recent, game.recent.map(({ epOdds: _, ...roll }) => roll))
   assert.deepEqual(migrated.discoveries, game.discoveries)
   assert.deepEqual(migrated.purchases, game.purchases)
   assert.equal(migrated.balance, game.balance)
@@ -260,7 +260,7 @@ test('upgraded saves refund Discovery and retain historical studies with changed
   const migrated = importSave(JSON.stringify(raw))
   assert.deepEqual(migrated.purchases, { catalog: 1, 'place-value': 1 })
   assert.deepEqual(migrated.retainedResearch, ['catalog', 'place-value'])
-  assert.deepEqual(migrated.recent, game.recent)
+  assert.deepEqual(migrated.recent, game.recent.map(({ epOdds: _, ...roll }) => roll))
   assert.equal(migrated.lifetime, game.lifetime)
   assert.equal(migrated.balance - BigInt(raw.balance), 283n)
   assert.deepEqual(importSave(exportSave(migrated)), migrated)

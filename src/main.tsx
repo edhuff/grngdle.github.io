@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { toggleBookmark, manualRoll, newGame, purchase, refund, type Game } from './game/game'
 import { integerText } from './game/math'
+import { effectsOf } from './game/research'
 import { loadLocal, saveLocal } from './game/save'
 import { Play } from './ui/Play'
 import { ResearchView } from './ui/Research'
 import { Collection, Statistics } from './ui/Records'
 import { SettingsView } from './ui/Settings'
 import { Mark } from './ui/shared'
+import { usePayoutProfile } from './ui/use-payout-profile'
 import './style.css'
 
 const lab = import.meta.env.DEV && import.meta.env.MODE === 'lab'
@@ -24,6 +26,7 @@ function App() {
   const [warning, setWarning] = useState(loaded.warning)
   const [rolling, setRolling] = useState(false)
   const timeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const preparingOdds = usePayoutProfile(effectsOf(game.purchases, game.legacyRange), page === 'Play')
 
   useEffect(() => () => { if (timeout.current) clearTimeout(timeout.current) }, [])
 
@@ -36,7 +39,7 @@ function App() {
   }
 
   function clickRoll() {
-    if (timeout.current !== null) return
+    if (timeout.current !== null || preparingOdds) return
     const state = current.current
     commit(manualRoll(state))
     if (state.settings.animations && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -63,7 +66,7 @@ function App() {
     <main className={page === 'Research' ? 'research-main' : page === 'Play' ? 'play-main' : 'secondary-main'}>
       {lab && <div className="notice">Developer lab · Reduced research costs and badge requirements · Isolated save</div>}
       {warning && <div className="notice" role="alert">{warning}</div>}
-      {page === 'Play' && <Play game={game} rolling={rolling} onRoll={clickRoll} onResearch={id => open('Research', id)} />}
+      {page === 'Play' && <Play game={game} rolling={rolling} preparingOdds={preparingOdds} onRoll={clickRoll} onResearch={id => open('Research', id)} />}
       {page === 'Research' && <ResearchView game={game} initialFocus={researchFocus} onBuy={id => commit(purchase(current.current, id))} onRefund={id => commit(refund(current.current, id))} onBookmark={id => commit(toggleBookmark(current.current, id))} />}
       {page === 'Collection' && <Collection game={game} />}
       {page === 'Statistics' && <Statistics game={game} />}

@@ -10,5 +10,12 @@ export default defineConfig({
     outDir: '../dist',
     emptyOutDir: true,
     assetsDir: 'pages-assets',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.endsWith('/generation/classical-signatures.ts')) return 'classical-payout-data'
+        },
+      },
+    },
   },
 })

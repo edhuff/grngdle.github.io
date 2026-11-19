@@ -204,11 +204,14 @@ test('historical v1 rolls stay readable and v2 rejects changed tickets and odds'
   }
   const migrated = importSave(JSON.stringify(raw))
   assert.equal(migrated.recent[0].generatorVersion, 1)
-  assert.equal(rollRarity(migrated.recent[0]).name, 'Common')
+  assert.equal(rollRarity(migrated.recent[0]), null)
+  assert.equal(migrated.unratedRolls, 1)
   assert.equal(migrated.recent[0].earned, 13n)
   const mixed = manualRoll(migrated, () => 314159)
   assert.equal(mixed.recent[0].generatorVersion, 2)
   assert.equal(mixed.recent[0].generation?.event.label, 'Constant Echo')
+  assert(mixed.recent[0].epOdds)
+  assert.equal(Object.values(mixed.distribution).reduce((sum, count) => sum + count, 0), 1)
   assert.deepEqual(importSave(exportSave(mixed)), mixed)
   const altered = JSON.parse(exportSave(mixed))
   altered.recent[0].generation.ticket = '1'

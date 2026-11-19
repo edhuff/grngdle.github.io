@@ -1,7 +1,7 @@
 import { badgeRule, type Badge, type BadgeFamily } from './attributes'
-import { rewards } from './economy'
-import { generate, type WordSource } from './generator'
-import { compareProbability, magnitude, rarities, rarityOf, type Expression, type Fraction, type Rarity } from './math'
+import { rarityEvent, rewards } from './economy'
+import { generate, type GeneratorOptions, type Source, type WordSource } from './generator'
+import { compareProbability, eventRarity, magnitude, rarities, rarityOf, type EventOdds, type Expression, type Fraction, type Rarity } from './math'
 import { effectsOf, owns, rankCost, researchById, researchStatus, meets, type Purchases } from './research'
 
 export type Roll = {
@@ -9,14 +9,15 @@ export type Roll = {
   expression: Expression
   probability: Fraction
   generatorVersion: number
-  source: ReturnType<typeof generate>['source']
+  source: Source
+  generation?: { configuration: GeneratorOptions; ticket: bigint; event: EventOdds }
   badges: Badge[]
   earned: bigint
   bonus: bigint
 }
 export type Settings = { animations: boolean; reducedEffects: boolean; showBadgeOdds: boolean }
 export type Game = {
-  schema: 4; lab: boolean; balance: bigint; lifetime: bigint; rolls: number
+  schema: 5; lab: boolean; balance: bigint; lifetime: bigint; rolls: number
   purchases: Purchases; retainedResearch: string[]; discoveries: Partial<Record<BadgeFamily, number>>
   distribution: Record<Rarity, number>
   recent: Roll[]; rarest: Roll[]; highest: Roll[]; largest: Roll[]
@@ -25,7 +26,7 @@ export type Game = {
 
 export function newGame(lab = false): Game {
   return {
-    schema: 4, lab, balance: 0n, lifetime: 0n, rolls: 0, purchases: {}, retainedResearch: [], discoveries: {},
+    schema: 5, lab, balance: 0n, lifetime: 0n, rolls: 0, purchases: {}, retainedResearch: [], discoveries: {},
     distribution: Object.fromEntries(rarities.map(tier => [tier.name, 0])) as Game['distribution'],
     recent: [], rarest: [], highest: [], largest: [],
     settings: { animations: true, reducedEffects: false, showBadgeOdds: false },
@@ -42,22 +43,36 @@ const compareBig = (a: bigint, b: bigint) => a === b ? 0 : a > b ? -1 : 1
 const insert = (existing: Roll[], roll: Roll, compare: (a: Roll, b: Roll) => number) =>
   [...existing, roll].sort((a, b) => compare(a, b) || a.index - b.index).slice(0, recordLimit)
 
+export function rollRarity(roll: Roll) {
+  return roll.generation ? eventRarity(roll.generation.event.probability) : rarityOf(roll.probability)
+}
+
+function compareRarity(a: Roll, b: Roll) {
+  const tier = rarities.indexOf(rollRarity(b)) - rarities.indexOf(rollRarity(a))
+  if (tier) return tier
+  const scope = (roll: Roll) => !roll.generation ? 2 : roll.generation.event.scope === 'Current pool' ? 0 : 1
+  return scope(a) - scope(b) || compareProbability(
+    a.generation?.event.probability ?? a.probability, b.generation?.event.probability ?? b.probability,
+  )
+}
+
 export function manualRoll(game: Game, word?: WordSource): Game {
   const effects = effectsOf(game.purchases)
-  const { expression, probability, version, source } = generate(effects.generator, word)
-  const reward = rewards(expression, game.purchases, effects)
-  const roll: Roll = { index: game.rolls + 1, expression, probability, generatorVersion: version, source, ...reward }
+  const { expression, probability, version, source, configuration, ticket, event } = generate(effects.generator, word)
+  const reward = rewards(expression, game.purchases, effects, source)
+  const generation = { configuration, ticket, event: rarityEvent(source, reward.badges, event) }
+  const roll: Roll = { index: game.rolls + 1, expression, probability, generatorVersion: version, source, generation, ...reward }
   const discoveries = { ...game.discoveries }
   for (const family of new Set(roll.badges.map(item => badgeRule(item.id).family))) {
     discoveries[family] = (discoveries[family] ?? 0) + 1
   }
-  const tier = rarityOf(probability).name
+  const tier = rollRarity(roll).name
   const value = magnitude(expression)
   return {
     ...game, rolls: roll.index, balance: game.balance + roll.earned, lifetime: game.lifetime + roll.earned, discoveries,
     distribution: { ...game.distribution, [tier]: game.distribution[tier] + 1 },
     recent: [roll, ...game.recent].slice(0, recentRollLimit),
-    rarest: insert(game.rarest, roll, (a, b) => compareProbability(a.probability, b.probability)),
+    rarest: insert(game.rarest, roll, compareRarity),
     highest: insert(game.highest, roll, (a, b) => compareBig(a.earned, b.earned)),
     largest: value === null ? game.largest : insert(game.largest, roll, (a, b) => compareBig(magnitude(a.expression)!, magnitude(b.expression)!)),
   }

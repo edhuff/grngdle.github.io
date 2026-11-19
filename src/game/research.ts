@@ -1,6 +1,7 @@
 import { initialFamilies, type BadgeFamily } from './attributes'
 import type { GeneratorOptions } from './generator'
 import { milestones } from './progression'
+import { familyDefaults, type AdvancedFamily, type FamilyParameters } from './generation/config'
 
 export const disciplines = [
   { name: 'Numerical Expansion', short: 'Expansion', color: '#b59aff' },
@@ -30,6 +31,7 @@ type Effect =
   | { kind: 'familyEP'; family: BadgeFamily; amount: number }
   | { kind: 'family'; family: BadgeFamily }
   | { kind: 'unlock'; feature: 'wide' | 'vast' | 'arithmetic' | 'nesting' }
+  | { kind: 'generator'; family: AdvancedFamily; tuning?: Partial<FamilyParameters> }
   | { kind: 'anomaly'; amount: number }
   | { kind: 'specialize'; choice: Specialization }
 
@@ -50,6 +52,8 @@ const families = (amount: number): Requirement => ({ kind: 'families', amount })
 const ep = (basis: number): Effect => ({ kind: 'ep', basis })
 const badgeEP = (family: BadgeFamily, amount = 1): Effect => ({ kind: 'familyEP', family, amount })
 const unlock = (feature: Extract<Effect, { kind: 'unlock' }>['feature']): Effect => ({ kind: 'unlock', feature })
+
+const generator = (family: AdvancedFamily, tuning?: Partial<FamilyParameters>): Effect => ({ kind: 'generator', family, tuning })
 
 function study(
   discipline: number, id: string, title: string, legacyCost: bigint,
@@ -107,6 +111,17 @@ export const research: ResearchNode[] = [
   study(7, 'magnitude-focus', 'Magnitude Focus', 9000n, 'Widen symbolic operands and shift 4 percentage points toward expanded integers.', [{ kind: 'specialize', choice: 'magnitude' }], node('expansion'), { refundable: true, era: 1 }),
   study(7, 'rarity-focus', 'Rarity Focus', 9000n, 'Shift 4 percentage points toward each unlocked vast or symbolic band.', [{ kind: 'specialize', choice: 'rarity' }], node('expansion'), { refundable: true, era: 1 }),
   study(7, 'efficiency-focus', 'Efficiency Focus', 9000n, '+25% of base EP on every roll.', [{ kind: 'specialize', choice: 'efficiency' }, ep(2500)], node('expansion'), { refundable: true, era: 1 }),
+  study(1, 'exact-operations', 'Exact Operations', 48_000n, 'Add signed subtraction, nonzero division, and factorials.', [generator('subtraction'), generator('division'), generator('factorials')], node('arithmetic'), { era: 1 }),
+  study(0, 'digit-strings', 'Long Integers', 125_000n, 'Add weighted decimal strings from 26 to 40 digits.', [generator('digits')], node('vast'), { era: 2 }),
+  study(4, 'digit-spectrum', 'Digit Spectrum', 90_000n, 'Per rank, extend the digit limit by 24 and increase the zero and family weights.', [generator('digits', { complexity: 24, digitBias: 1, weight: 1 })], node('digit-strings'), { max: 4, era: 2 }),
+  study(1, 'exponentiation', 'Exponentiation', 320_000n, 'Add powers and right-nested exponents.', [generator('powers')], all(node('exact-operations'), node('digit-spectrum')), { era: 2 }),
+  study(2, 'tower-reach', 'Tower Operands', 210_000n, 'Per rank, add one exponent layer and increase the operand limit and weight.', [generator('powers', { complexity: 1, operandMax: 3, weight: 1 })], node('exponentiation'), { max: 4, era: 2 }),
+  study(2, 'power-towers', 'Power Towers', 550_000n, 'Add right-associated power towers and tetration with variable heights.', [generator('towers'), generator('tetration')], node('tower-reach'), { era: 2 }),
+  study(1, 'hyperoperations', 'Hyperoperations', 850_000n, 'Add pentation, hexation, higher finite ranks, and Knuth up-arrows.', [generator('hyperoperations'), generator('arrows')], node('power-towers'), { era: 3 }),
+  study(4, 'arrow-spectrum', 'Arrow Spectrum', 470_000n, 'Each rank increases the maximum arrow count by three decimal orders and extends finite hyperoperation ranks.', [generator('arrows', { complexity: 3, weight: 1 }), generator('hyperoperations', { complexity: 1 })], node('hyperoperations'), { max: 6, era: 4 }),
+  study(1, 'conway-chains', 'Conway Chained Arrows', 1_350_000n, 'Add variable-length Conway chains, including nested chains.', [generator('chains')], node('arrow-spectrum'), { era: 4 }),
+  study(6, 'ordinal-hierarchy', 'Ordinal Hierarchy', 2_250_000n, 'Add fast-growing functions indexed by ordinals in Cantor normal form.', [generator('hierarchy')], node('conway-chains'), { era: 5 }),
+  study(7, 'extreme-googology', 'Extreme Googology', 3_750_000n, 'Add Busy Beaver steps and ones, and Ackermann–Péter functions.', [generator('busy'), generator('ackermann')], node('ordinal-hierarchy'), { era: 6 }),
 ]
 
 export const researchById = new Map(research.map(item => [item.id, item]))
@@ -163,6 +178,11 @@ export function specializationOf(purchases: Purchases): Specialization | null {
 }
 
 export function researchEra(purchases: Purchases) {
+  if (owns(purchases, 'extreme-googology')) return 7
+  if (owns(purchases, 'ordinal-hierarchy')) return 6
+  if (owns(purchases, 'conway-chains')) return 5
+  if (owns(purchases, 'hyperoperations')) return 4
+  if (owns(purchases, 'power-towers')) return 3
   if (owns(purchases, 'arithmetic')) return 2
   if (owns(purchases, 'expansion')) return 1
   return 0
@@ -181,6 +201,7 @@ export function effectsOf(purchases: Purchases) {
   const generator: GeneratorOptions = {
     wide: false, vast: false, arithmetic: false, nesting: false, anomaly: 0, specialization: specializationOf(purchases),
   }
+  const generatorTuning: Partial<Record<AdvancedFamily, FamilyParameters>> = {}
   let basis = 10_000n
   const families = [...initialFamilies]
   const familyEP: Partial<Record<BadgeFamily, bigint>> = {}
@@ -192,10 +213,25 @@ export function effectsOf(purchases: Purchases) {
         case 'ep': basis += BigInt(effect.basis * rank); break
         case 'familyEP': familyEP[effect.family] = (familyEP[effect.family] ?? 0n) + BigInt(effect.amount * rank); break
         case 'family': if (!families.includes(effect.family)) families.push(effect.family); break
+        case 'generator': {
+          generator.advanced ??= {}
+          if (!effect.tuning) {
+            generator.advanced[effect.family] = { ...familyDefaults[effect.family] }
+            break
+          }
+          const delta = generatorTuning[effect.family] ??= { weight: 0, operandMax: 0, complexity: 0, digitBias: 0 }
+          for (const key of Object.keys(effect.tuning) as (keyof FamilyParameters)[]) delta[key] += effect.tuning[key]! * rank
+          break
+        }
         case 'anomaly': generator.anomaly += effect.amount * rank; break
         case 'unlock': generator[effect.feature] = true; break
       }
     }
+  }
+  for (const [id, delta] of Object.entries(generatorTuning)) {
+    const params = generator.advanced?.[id as AdvancedFamily]
+    if (!params) continue
+    for (const key of Object.keys(delta) as (keyof FamilyParameters)[]) params[key] += delta[key]
   }
   return { generator, basis, families, familyEP }
 }

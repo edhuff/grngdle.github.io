@@ -1,0 +1,41 @@
+# Mathematical generation engine
+
+Every game roll is a single manual action. The browser uses cryptographic 32-bit words and unbiased rejection sampling. Tests and the offline simulator can inject seeded words. Research adds bands to the pool while retaining positive weight for earlier bands.
+
+## Generation and research
+
+| Research | Added outcomes |
+| --- | --- |
+| Starting pool | Each integer from 0 through 1,000,000 with equal probability |
+| Beyond a Million and Arbitrary Precision | Two disjoint uniform integer intervals through 10¹² and 10²⁴ |
+| Expression Grammar and Nested Arithmetic | Ordered sums and products, then depth-two combinations of them |
+| Exact Operations | Signed differences, rational quotients with nonzero denominators, and factorials |
+| Long Integers and Digit Spectrum | Decimal strings starting at 26 digits. Length is uniform over the unlocked range, leading digits are uniform from 1 to 9, and later zero digits can receive extra weight |
+| Exponentiation and Tower Operands | Simple and right-nested powers with configurable operand bounds and depth |
+| Power Towers | Variable-height right-associated towers and tetration |
+| Hyperoperations and Arrow Spectrum | Pentation, hexation, and higher finite ranks, plus Knuth up-arrows with BigInt arrow counts. Each Arrow Spectrum rank extends the count range by three decimal orders |
+| Conway Chained Arrows | Variable-length chains of positive integers and chains with a nested positive chain |
+| Ordinal Hierarchy | Finite and transfinite indices for the fast-growing hierarchy below ε₀ |
+| Extreme Googology | The steps and ones versions of Busy Beaver, plus Ackermann–Péter functions |
+
+The original expanded intervals include 10²⁴. The weighted length band starts at 10²⁵, so the intervals and digit grammar have no overlapping integer outcomes. Bands define their own weight, operand bounds, and structural limits. Ranked products and disjoint syntax variants make exactly enumerated grammar sizes possible. More complex grammars can be added through the band registry without changing save mechanics or the research UI.
+
+## Conventions and supported analysis
+
+- **Arithmetic and towers.** Quotients are reduced signed rationals. Factorials use natural inputs, with 0! = 1. Powers have natural exponents, and 0⁰ is outside the evaluator's domain. A power tower associates to the right.
+- **Hyperoperations.** H₀(a,b) = b+1, H₁ is addition, H₂ multiplication, and H₃ exponentiation. For r ≥ 4, Hᵣ(a,0) = 1 and Hᵣ(a,b+1) = Hᵣ₋₁(a,Hᵣ(a,b)). Generation uses bases a ≥ 2. Knuth's a ↑ᵏ b for positive k and b is Hₖ₊₂(a,b). The display writes arbitrary finite counts as `↑^{k}`.
+- **Conway chains.** Positive chains use ordinary Conway chained arrows. A single entry is itself and a pair is a power. A 1 terminates the chain, so X → 1 → Y reduces to X. With nonempty X and p,q ≥ 2, X → p → q reduces to X → (X → (p−1) → q) → (q−1). A parenthesized chain in a generated term supplies a positive integer.
+- **Ordinals and the hierarchy.** Indices use descending Cantor normal form below ε₀ with positive natural coefficients. The ordinal module supports comparison, addition, multiplication, and fundamental sequences. With the trailing ω-power split off, ω^(β+1)[n] = ω^β·(n+1), and ω^λ[n] = ω^(λ[n]) when λ is a limit. The hierarchy is F₀(n) = n+1, Fₐ₊₁(n) = Fₐ iterated n+1 times at n, and Fλ(n) = Fλ[n](n).
+- **Extreme functions.** S(n) maximizes steps and Σ(n) maximizes final ones among halting deterministic two-symbol Turing machines with n working states on a blank tape and one separate halt state. The transition into halt counts as a step and may write a symbol. The evaluator includes tabulated exact values for n = 1 through 4. Larger n remain symbolic in this implementation, even when additional exact results are known externally. Ackermann–Péter uses A(0,n) = n+1, A(m+1,0) = A(m,1), and A(m+1,n+1) = A(m,A(m+1,n)).
+
+Exact evaluation has a 1,024-bit result limit and separate operation and recursion budgets. Large hyperoperations, Conway chains, hierarchy terms, and Ackermann expressions often exceed them. The engine generates and renders those expressions symbolically, simplifies exact or safe identity cases, and derives lower bounds when justified. It can prove exact comparisons, equality of identical valid natural expressions, and comparisons where a certified lower bound exceeds an exact value. Other comparisons are unknown. The largest-integer collection ranks exact integers. Primality is certified by deterministic witnesses below 2⁶⁴, with some composite cases checked above that bound.
+
+## Probabilities, rarity, and saves
+
+- **Exact expression odds** are band weight divided by total pool weight, multiplied by the conditional mass of that AST. Uniform grammars use exact counts of ordered ASTs. Weighted digit strings use the product of the actual digit masses and length mass. BigInt fractions retain the full ratio.
+- **Equivalent-value odds** sum contributions from all active bands, accounting for distinct ASTs that evaluate to the same integer or rational. Range, digit, sum/product, difference, and quotient bands use closed counts. Small other bands are enumerated under a fixed budget. If a contribution remains unproved, the inspector shows unknown with a certified minimum.
+- **Rarity events** have their own odds and scope. For Classical integers, the tier uses the rarest matching badge with an exact frequency over the Classical range. For other draws it uses a documented event in the current pool, such as a range, operator shape, digit length, tower height, or arrow count. These tiers are independent of exact expression odds and numerical magnitude.
+- **EP** uses the original Classical rewards. The legacy sum/product grammars retain their structural payouts, with integer-result badges shown as annotations. New expressions can award both structural and exact-integer badges. Structural measures use BigInt and scale by their decimal order for EP.
+- **Historical records** store the generator version, exact expression and rarity-event odds, the effective research-derived generator configuration, and a replay ticket. Imports replay v2 tickets to verify the AST and exact odds. Older v1 records retain their saved probabilities and rarity model. Their equivalent-value odds are unavailable because those saves did not record generator settings.
+
+Run `npm test` for mathematical and integration tests. Run `npm run validate:generation` for the seeded offline frequency check. The browser exposes individual manual rolls.

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright-core'
 import { manualRoll, newGame, purchase } from '../src/game/game.ts'
-import { seededWords } from '../src/game/generator.ts'
-import { classicalRoute, rankCost, researchById } from '../src/game/research.ts'
+import { distribution, seededWords } from '../src/game/generator.ts'
+import { classicalRoute, effectsOf, rankCost, research, researchById } from '../src/game/research.ts'
 import { exportSave } from '../src/game/save.ts'
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', args: ['--disable-dev-shm-usage'] })
@@ -171,7 +171,40 @@ try {
     assert.equal(updatedLab.purchases.expansion, 1)
     assert.equal(updatedLab.purchases.arithmetic, 1)
     assert.equal(await lab.evaluate(() => localStorage.getItem('grngdle.save.production')), null)
-    console.log('Developer lab smoke passed: both unlock purchases, updated distribution, one manual roll, isolated save.')
+    const late = await browser.newPage({ viewport: { width: 390, height: 844 } })
+    late.on('pageerror', error => faults.push(String(error)))
+    let lateGame = newGame(true)
+    lateGame.settings.animations = false
+    const lateWord = seededWords(234)
+    const routeToExtreme = research.filter(node => (!node.refundable || node.id === 'efficiency-focus') && node.id !== 'anomaly')
+    for (let index = 0; index < 2000 && !lateGame.purchases['extreme-googology']; index++) {
+      lateGame = manualRoll(lateGame, lateWord)
+      for (const node of routeToExtreme) if (!lateGame.purchases[node.id]) lateGame = purchase(lateGame, node.id)
+    }
+    assert(lateGame.purchases['extreme-googology'])
+    const finalBands = distribution(effectsOf(lateGame.purchases).generator).bands
+    const busyOffset = finalBands.slice(0, finalBands.findIndex(band => band.id === 'busy')).reduce((sum, band) => sum + band.weight, 0n)
+    await late.addInitScript(({ save, offset }) => {
+      const key = 'grngdle.save.lab'
+      if (!localStorage.getItem(key)) localStorage.setItem(key, save)
+      const words = [offset, 9]
+      const getRandomValues = crypto.getRandomValues.bind(crypto)
+      crypto.getRandomValues = array => {
+        if (!(array instanceof Uint32Array) || array.length !== 1 || words.length === 0) return getRandomValues(array)
+        array[0] = words.shift()
+        return array
+      }
+    }, { save: exportSave(lateGame), offset: Number(busyOffset) })
+    await late.goto(process.argv[3], { waitUntil: 'networkidle' })
+    await late.getByRole('button', { name: 'Roll', exact: true }).click()
+    assert.equal(await late.getByTestId('roll-number').getAttribute('aria-label'), 'S(10)')
+    await late.getByRole('navigation').getByRole('button', { name: 'Collection' }).click()
+    await late.getByRole('button', { name: 'Recent', exact: true }).click()
+    await late.getByText(/Exact expression odds/).waitFor()
+    await late.getByText(/Equivalent-value odds unknown/).waitFor()
+    await late.getByText(/Exact value Unknown · Proven lower bound 107/).waitFor()
+    assert(await late.evaluate(() => document.documentElement.scrollWidth === innerWidth))
+    console.log('Developer lab smoke passed: early unlocks, extreme rolls, symbolic inspector, and isolated saves.')
   }
   assert.deepEqual(faults, [])
   console.log('Chromium smoke passed: manual click and key hold, idle, graph zoom/pan/buy, records, stats, settings, save export/import/reset/reload, mobile layout.')

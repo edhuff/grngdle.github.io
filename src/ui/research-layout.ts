@@ -16,6 +16,10 @@ const positions: Record<string, [number, number]> = {
   expansion: [720, 822],
   anomaly: [380, 931], 'magnitude-focus': [605, 931], 'rarity-focus': [833, 931], 'efficiency-focus': [1060, 931],
   arithmetic: [720, 1040], nesting: [720, 1144], vast: [720, 1248],
+  'exact-operations': [422, 1144], 'digit-strings': [720, 1352], 'digit-spectrum': [720, 1456],
+  exponentiation: [720, 1560], 'tower-reach': [720, 1664], 'power-towers': [720, 1768],
+  hyperoperations: [720, 1872], 'arrow-spectrum': [720, 1976], 'conway-chains': [720, 2080],
+  'ordinal-hierarchy': [720, 2184], 'extreme-googology': [720, 2288],
 }
 
 export function positionOf(id: string): Point {

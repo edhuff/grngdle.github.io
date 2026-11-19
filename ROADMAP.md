@@ -1,21 +1,21 @@
 # gRNGdle development roadmap
 
-The prototype implements Classical integers, expanded integer bands, and ordered sums and products. The remaining notation families are planned.
+The game can generate all the notation families below. [Mathematical conventions and limits](MATHEMATICS.md) describes the exact and symbolic capabilities.
 
-| Cumulative milestone | Active play target | Delivery |
+| Cumulative milestone | Active play target | Next work |
 | --- | --- | --- |
-| First integer expansion | 1.5–2 h | Playable. Extend the Classical region to 80–120 total studies, with 30–50 on the main route and optional analysis and efficiency branches. |
-| Advanced arithmetic | 4–12 h | Sums, products, and nesting are playable. Add more arithmetic grammars and exact domain checks. |
-| Exponentiation and factorials | 12–24 h | Add integer powers and factorials as typed operators with controlled operands, lazy formatting, and bounded exact evaluation. |
-| Power towers and tetration | 24–50 h | Add right-associated towers and integer tetration. Document height conventions and certified comparison rules. |
-| Higher hyperoperations | 50–100 h | Add generalized integer ranks and Knuth up-arrows, with rank and arrow-count badges and explicit domains. |
-| Conway chained arrows | 100–180 h | Add the established chain grammar and recurrence rules. Keep rendering and inspection bounded. |
-| Ordinal-indexed functions | 180–300 h | Pick a specific ordinal notation and fundamental-sequence convention. Add a corresponding fast-growing hierarchy and domain validation. |
-| Extreme googology | 300–500+ h | Add formally specified Busy Beaver variants as symbolic expressions. Only show values or comparisons where a proof or trusted bound is available. |
+| First integer expansion | 1.5–2 h | Broaden the Classical research region with optional analysis and efficiency branches. |
+| Advanced arithmetic | 4–12 h | Add more grammar variants when their domains and odds can be established. |
+| Exponentiation and factorials | 12–24 h | Add more operand distributions and improve small-support equivalent-value counting. |
+| Power towers and tetration | 24–50 h | Expand certified magnitude comparisons. |
+| Higher hyperoperations | 50–100 h | Extend research for higher ranks and arrow counts. |
+| Conway chained arrows | 100–180 h | Add more nested forms with proven-positive terms. |
+| Ordinal-indexed functions | 180–300 h | Expand the Cantor normal form grammar and hierarchy-specific analysis. |
+| Extreme googology | 300–500+ h | Add further established functions and certified bounds. |
 
 ## Scale the research network
 
-Build toward roughly 1,100 studies in eight disciplines. Give every era an entry breakthrough and several paths through different disciplines that rejoin at the next milestone. Add studies in data modules grouped by era, with stable node IDs, graph coordinates, prereq rules, and reusable effect types. Validate IDs, dependencies, reachability, costs, and layout in CI. Retain earlier generator choices in each era and version changes to their distributions.
+Build toward 1,400+ studies in eight disciplines. Give every era an entry breakthrough and several paths through different disciplines that rejoin at the next milestone. Add studies in data modules grouped by era, with stable node IDs, graph coordinates, prereq rules, and reusable effect types. Validate IDs, dependencies, reachability, costs, and layout in CI. Retain earlier generator choices in each era and version changes to their distributions.
 
 As the map grows, add discipline and era search, jump links, branch collapsing, and viewport culling while keeping the selected study’s direct prerequisites visible. Give each major unlock an inspection view for its exact sampling rules and mathematical domains.
 

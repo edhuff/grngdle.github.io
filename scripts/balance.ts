@@ -1,9 +1,10 @@
 import { rewards } from '../src/game/economy'
 import { manualRoll, newGame, progress, purchase } from '../src/game/game'
 import { generate, seededWords } from '../src/game/generator'
-import { milestones } from '../src/game/progression'
+import { milestones as progressionMilestones } from '../src/game/progression'
 import { classicalRoute, effectsOf, owns, rankCost, research, researchById, researchStatus } from '../src/game/research'
 
+const milestones = progressionMilestones.slice(0, 4)
 const samples = Number(process.argv[2] ?? 250_000)
 const runs = Number(process.argv[3] ?? 8)
 const secondsPerRoll = Number(process.argv[4] ?? 7.5)

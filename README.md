@@ -1,6 +1,6 @@
 # gRNGdle
 
-A browser-based, manual RNG collection game about the mathematics of large numbers. The prototype starts with a uniform roll from **0 through 1,000,000**. Find mathematical attributes, earn Expression Points (EP), and spend them on research. The research tree contains **40 studies across eight disciplines**. All branches start at Yield Calibration and contribute to a milestone, with 33 studies on the route through the first expansion.
+A browser-based, manual RNG collection game about the mathematics of large numbers. The prototype starts with a uniform roll from **0 through 1,000,000**. Find mathematical attributes, earn Expression Points (EP), and spend them on research. The research tree contains **51 studies across eight disciplines**. All branches start at Yield Calibration and contribute to a milestone, with 33 studies on the route through the first expansion.
 
 ## Play on GitHub Pages
 
@@ -27,15 +27,18 @@ Open the address Vite prints, usually `http://localhost:5173`. Use **Roll** or p
 
 - **Classical Era** — Uniform integers, number-theory and digit-pattern badges, and branches that converge on Beyond a Million.
 - **Numerical Expansion** — Research opens separate integer bands through one trillion and then through 10²⁴. The Classical band remains available.
-- **Extended Arithmetic** — Research adds ordered sums, products, and depth-two expressions. Anomaly Weighting or any one of three specializations opens the path to Expression Grammar. The specializations trade off operand size, distribution weights, and EP. You can refund a specialization and keep the milestones it helped unlock.
+- **Symbolic progression** — The tree continues from exact arithmetic and long integers through exponentiation, towers, hyperoperations, Conway chains, ordinal-indexed hierarchies, and extreme googology.
 - **Collection** — Every player can inspect roll values and expression depth. The game remembers up to 90 recent rolls.
-- **Rarity** — The rarity tier uses the exact probability of the generated integer or ordered expression. Classical integers have identical odds, so unusual Classical discoveries show up in their badge combinations and EP rewards. Badge frequencies use the Classical sample space. Symbolic odds describe the ordered expression, since distinct expressions can evaluate to the same number.
+- **Rarity** — The inspector shows separate odds for the exact expression and its rarity event, plus equivalent-value odds where they can be established.
+
+See [Mathematical conventions and limits](MATHEMATICS.md) for the complete family and research table.
 
 ## Architecture
 
 | Module | Responsibility |
 | --- | --- |
-| `src/game/math.ts` and `generator.ts` | BigInt fractions, expression ASTs, notation, bounded exact evaluation, and uniform sampling with injectable random words |
+| `src/game/math/` | ASTs, notation, ordinal arithmetic, bounded exact evaluation, and magnitude proofs |
+| `src/game/generation/` and `generator.ts` | Research configuration, ranked domains, seeded sampling, and exact odds |
 | `src/game/attributes.ts` and `economy.ts` | Integer and expression rules, badge probabilities, and research-modified EP |
 | `src/game/research.ts` | Declarative studies, validated dependency graphs, rank costs, unlocks, and milestones |
 | `src/game/game.ts` and `save.ts` | Immutable game transitions, discovery records, schema validation, migrations, and browser storage |
@@ -46,6 +49,7 @@ Open the address Vite prints, usually `http://localhost:5173`. Use **Roll** or p
 ```bash
 npm test
 npm run balance
+npm run validate:generation
 npm run dev:lab -- --port 5174
 ```
 
@@ -61,4 +65,4 @@ Milestones unlock when their research prerequisites are met and you can afford t
 
 Older saves keep their roll history and existing studies as they move to the connected tree. Purchases of retired Discovery studies are refunded in EP. Earlier pricing rebates still apply.
 
-See [ROADMAP.md](ROADMAP.md) for the 1,100-study plan.
+See [ROADMAP.md](ROADMAP.md) for the 1,400-study plan.

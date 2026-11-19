@@ -1,19 +1,38 @@
-import { badgeRule, evaluateAttributes, rewardFor, type Badge } from './attributes'
-import { DISTRIBUTION_TOTAL, generatorBands } from './generator'
-import { fraction, type Expression } from './math'
+import { badgeReference, badgeRule, evaluateAttributes, rewardFor, type Badge } from './attributes'
+import { distribution, type Source } from './generator'
+import { compareProbability, fraction, type EventOdds, type Expression } from './math'
 import { effectsOf, type Purchases } from './research'
 
-export function rewards(expression: Expression, purchases: Purchases, effects = effectsOf(purchases)) {
-  const badges: Badge[] = evaluateAttributes(expression, effects.families)
-  const bands = expression.kind === 'integer' ? [] : generatorBands(effects.generator)
+export function rarityEvent(source: Source, badges: Badge[], fallback: EventOdds): EventOdds {
+  if (source !== 'classical') return fallback
+  let rarest: EventOdds | undefined
+  for (const badge of badges) {
+    const probability = badgeReference(badge.id)
+    if (probability && (!rarest || compareProbability(probability, rarest.probability) < 0)) {
+      rarest = { label: badgeRule(badge.id).name, scope: 'Classical integers', probability }
+    }
+  }
+  return rarest ?? fallback
+}
+
+export function rewards(expression: Expression, purchases: Purchases, effects = effectsOf(purchases), source?: Source) {
+  const legacyShape = source === 'arithmetic' || source === 'nested' ||
+    (source === undefined && (expression.kind === 'add' || expression.kind === 'multiply'))
+  const badges: Badge[] = evaluateAttributes(expression, effects.families, true, legacyShape)
+  const { bands, total } = expression.kind === 'integer' ? { bands: [], total: 1n } : distribution(effects.generator)
   const nestedWeight = bands.find(band => band.id === 'nested')?.weight ?? 0n
   const arithmeticWeight = bands.find(band => band.id === 'arithmetic')?.weight ?? 0n
   for (const badge of badges) {
     const family = badgeRule(badge.id).family
-    if (family === 'structure') {
+    if (legacyShape && family !== 'structure') {
+      // Value annotations are shown without changing legacy arithmetic payouts.
+      badge.reward = 0n
+      continue
+    }
+    if (legacyShape && (badge.id === 'addition' || badge.id === 'product' || badge.id === 'nested')) {
       const occurrence = badge.id === 'nested'
-        ? fraction(nestedWeight, DISTRIBUTION_TOTAL)
-        : fraction(nestedWeight + arithmeticWeight, 2n * DISTRIBUTION_TOTAL)
+        ? fraction(nestedWeight, total)
+        : fraction(nestedWeight + arithmeticWeight, 2n * total)
       badge.reward = rewardFor(badge.id, badge.level, occurrence)
     }
     badge.reward += effects.familyEP[family] ?? 0n

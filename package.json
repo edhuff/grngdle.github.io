@@ -11,7 +11,8 @@
     "test": "tsx --test tests/*.test.ts",
     "balance": "tsx scripts/balance.ts",
     "test:browser": "tsx tests/browser.mjs",
-    "build:pages": "npm run build && node scripts/prepare-pages.mjs"
+    "build:pages": "npm run build && node scripts/prepare-pages.mjs",
+    "validate:generation": "tsx scripts/validate-generation.ts"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

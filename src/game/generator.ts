@@ -1,94 +1,124 @@
-import { fraction, integer, type Expression } from './math'
+import { integer, type Expression } from './math/ast'
+import type { Rational } from './math/evaluate'
+import { fraction, multiplyProbability } from './math/probability'
+import { advancedFamilies, snapshot, type AdvancedFamily, type GeneratorOptions } from './generation/config'
+import { integerRange, product, type Domain } from './generation/domains'
+import { advancedDomains } from './generation/families'
+import { cryptoWord, uniformBelow, type WordSource } from './generation/random'
+
+export { seededWords, uniformBelow, type WordSource } from './generation/random'
+export { type GeneratorOptions } from './generation/config'
 
 export const CLASSICAL_MAX = 1_000_000n
-export const GENERATOR_VERSION = 1
-export type WordSource = () => number
-export type GeneratorOptions = {
-  wide: boolean
-  vast: boolean
-  arithmetic: boolean
-  nesting: boolean
-  anomaly: number
-  specialization: 'magnitude' | 'rarity' | 'efficiency' | null
-}
-
-const browserWords = new Uint32Array(1)
-export const cryptoWord: WordSource = () => crypto.getRandomValues(browserWords)[0]
-
-export function seededWords(seed: number): WordSource {
-  let state = seed >>> 0
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0
-    let value = Math.imul(state ^ state >>> 15, state | 1)
-    value ^= value + Math.imul(value ^ value >>> 7, value | 61)
-    return (value ^ value >>> 14) >>> 0
-  }
-}
-
-export function uniformBelow(limit: bigint, word: WordSource): bigint {
-  if (limit < 1n) throw new RangeError('Empty sampling range')
-  if (limit === 1n) return 0n
-  const bits = (limit - 1n).toString(2).length
-  const words = Math.ceil(bits / 32)
-  const mask = (1n << BigInt(bits)) - 1n
-  for (;;) {
-    let candidate = 0n
-    for (let index = 0; index < words; index++) candidate = (candidate << 32n) | BigInt(word())
-    candidate &= mask
-    if (candidate < limit) return candidate
-  }
-}
-
-type Band = { id: 'classical' | 'expanded' | 'vast' | 'arithmetic' | 'nested'; weight: bigint; outcomes: bigint }
 export const EXPANDED_MAX = 10n ** 12n
 export const VAST_MAX = 10n ** 24n
 export const DISTRIBUTION_TOTAL = 100n
+export const GENERATOR_VERSION = 2
 
-export function generatorBands(options: GeneratorOptions): Band[] {
-  const anomaly = BigInt(Math.max(0, Math.min(6, options.anomaly)))
-  const operands = options.specialization === 'magnitude' ? 998n : 98n
+export type Source = 'classical' | 'expanded' | 'vast' | 'arithmetic' | 'nested' | AdvancedFamily
+type BandSummary = { id: Source; weight: bigint; outcomes: bigint }
+export type Band = BandSummary & { domain: Domain }
+export const sourceNames: Record<Source, string> = {
+  classical: 'Classical integer', expanded: 'Expanded integer', vast: 'Arbitrary precision',
+  arithmetic: 'Sum or product', nested: 'Nested expression', digits: 'Extended digit strings',
+  subtraction: 'Subtraction', division: 'Division', factorials: 'Factorial', powers: 'Exponentiation',
+  towers: 'Power towers', tetration: 'Tetration', hyperoperations: 'Finite hyperoperations',
+  arrows: 'Knuth up-arrows', chains: 'Conway chains', hierarchy: 'Fast-growing hierarchy',
+  busy: 'Busy Beaver', ackermann: 'Ackermann–Péter',
+}
+
+function arithmeticDomain(max: bigint, nested: boolean): Domain {
+  const width = max - 1n
+  const kind = (choice: bigint) => choice === 0n ? 'add' : 'multiply'
+  if (nested) {
+    return {
+      ...product([2n, 2n, width, width, width], ([root, branch, a, b, c]) => ({
+        kind: kind(root), left: { kind: kind(branch), left: integer(a + 2n), right: integer(b + 2n) }, right: integer(c + 2n),
+      })),
+      event: ticket => ({ label: ticket % 2n ? 'Nested product' : 'Nested sum', probability: fraction(1n, 2n) }),
+    }
+  }
+  const domain = product([2n, width, width], ([operator, a, b]) => ({ kind: kind(operator), left: integer(a + 2n), right: integer(b + 2n) }))
+  return {
+    ...domain,
+    event: ticket => ({ label: ticket % 2n ? 'Ordered product' : 'Ordered sum', probability: fraction(1n, 2n) }),
+    valueOdds(value: Rational) {
+      const n = value.numerator
+      if (value.denominator !== 1n || n < 4n || n > max * max) return fraction(0n, 1n)
+      const low = n - max > 2n ? n - max : 2n
+      const high = n - 2n < max ? n - 2n : max
+      let count = high >= low ? high - low + 1n : 0n
+      for (let a = 2n; a <= max && a * a <= n; a++) {
+        if (n % a === 0n && n / a <= max) count += a * a === n ? 1n : 2n
+      }
+      return fraction(count, domain.outcomes)
+    },
+  }
+}
+
+export function distribution(options: GeneratorOptions) {
+  const anomaly = BigInt(Math.min(6, options.anomaly))
+  const max = options.specialization === 'magnitude' ? 999n : 99n
   const bias = options.specialization === 'rarity' ? 4n : 0n
   const reach = options.specialization === 'magnitude' ? 4n : 0n
   const bands: Band[] = []
-  if (options.wide) bands.push({ id: 'expanded', weight: 22n + anomaly + reach, outcomes: EXPANDED_MAX - CLASSICAL_MAX })
-  if (options.vast) bands.push({ id: 'vast', weight: 4n + anomaly + bias, outcomes: VAST_MAX - EXPANDED_MAX })
-  if (options.arithmetic) bands.push({ id: 'arithmetic', weight: 12n + bias, outcomes: 2n * operands ** 2n })
-  if (options.nesting) bands.push({ id: 'nested', weight: 3n + bias, outcomes: 4n * operands ** 3n })
-  const classical = DISTRIBUTION_TOTAL - bands.reduce((sum, band) => sum + band.weight, 0n)
-  return [{ id: 'classical', weight: classical, outcomes: CLASSICAL_MAX + 1n }, ...bands]
+  function add(id: Source, weight: bigint, domain: Domain) {
+    bands.push({ id, weight, outcomes: domain.outcomes, domain })
+  }
+
+  if (options.wide) add('expanded', 22n + anomaly + reach, integerRange(CLASSICAL_MAX + 1n, EXPANDED_MAX))
+  if (options.vast) add('vast', 4n + anomaly + bias, integerRange(EXPANDED_MAX + 1n, VAST_MAX))
+  if (options.arithmetic) add('arithmetic', 12n + bias, arithmeticDomain(max, false))
+  if (options.nesting) add('nested', 3n + bias, arithmeticDomain(max, true))
+  const weight = DISTRIBUTION_TOTAL - bands.reduce((sum, band) => sum + band.weight, 0n)
+  const classical = integerRange(0n, CLASSICAL_MAX)
+  bands.unshift({ id: 'classical', weight, outcomes: classical.outcomes, domain: classical })
+  for (const id of advancedFamilies) {
+    const params = options.advanced?.[id]
+    if (params) add(id, BigInt(params.weight), advancedDomains[id](params))
+  }
+  return { bands, total: bands.reduce((sum, band) => sum + band.weight, 0n) }
+}
+
+export function generatorBands(options: GeneratorOptions): BandSummary[] {
+  return distribution(snapshot(options)).bands.map(({ id, weight, outcomes }) => ({ id, weight, outcomes }))
+}
+
+function materialize(band: Band, total: bigint, ticket: bigint) {
+  if (ticket < 0n || ticket >= band.domain.tickets) throw new RangeError('Invalid expression ticket')
+  const expression: Expression = band.domain.at(ticket)
+  const bandOdds = fraction(band.weight, total)
+  const probability = multiplyProbability(bandOdds, band.domain.odds?.(ticket, expression) ?? fraction(1n, band.outcomes))
+  const shape = band.domain.event?.(ticket)
+  const event = {
+    label: shape?.label ?? sourceNames[band.id],
+    scope: 'Current pool' as const,
+    probability: shape ? multiplyProbability(bandOdds, shape.probability) : bandOdds,
+  }
+  return { expression, probability, event, source: band.id, version: GENERATOR_VERSION }
+}
+
+export function replay(options: GeneratorOptions, source: Source, ticket: bigint) {
+  const { bands, total } = distribution(snapshot(options))
+  const band = bands.find(item => item.id === source)
+  if (!band) throw new RangeError('Generator family was not enabled')
+  return materialize(band, total, ticket)
 }
 
 export function generate(options: GeneratorOptions, word: WordSource = cryptoWord) {
-  const bands = generatorBands(options)
-  const [first] = bands
-  let selected = first
+  const configuration = snapshot(options)
+  const { bands, total } = distribution(configuration)
+  let chosen = bands[0]
   if (bands.length > 1) {
-    let draw = uniformBelow(DISTRIBUTION_TOTAL, word)
+    let draw = uniformBelow(total, word)
     for (const band of bands) {
       if (draw < band.weight) {
-        selected = band
+        chosen = band
         break
       }
       draw -= band.weight
     }
   }
-  let expression: Expression
-  if (selected.id === 'classical') expression = integer(uniformBelow(selected.outcomes, word))
-  else if (selected.id === 'expanded') expression = integer(CLASSICAL_MAX + 1n + uniformBelow(selected.outcomes, word))
-  else if (selected.id === 'vast') expression = integer(EXPANDED_MAX + 1n + uniformBelow(selected.outcomes, word))
-  else {
-    const width = options.specialization === 'magnitude' ? 998n : 98n
-    const operand = () => integer(2n + uniformBelow(width, word))
-    const operator = () => uniformBelow(2n, word) === 0n ? 'add' : 'multiply'
-    const left: Expression = selected.id === 'nested'
-      ? { kind: operator(), left: operand(), right: operand() }
-      : operand()
-    expression = { kind: operator(), left, right: operand() }
-  }
-  return {
-    expression,
-    probability: fraction(selected.weight, DISTRIBUTION_TOTAL * selected.outcomes),
-    source: selected.id,
-    version: GENERATOR_VERSION,
-  }
+  const ticket = uniformBelow(chosen.domain.tickets, word)
+  return { ...materialize(chosen, total, ticket), configuration, ticket }
 }

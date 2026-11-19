@@ -1,8 +1,8 @@
 import { useEffect, type CSSProperties } from 'react'
 import { ArrowUpRight, ChevronDown } from 'lucide-react'
 import { badgeRule } from '../game/attributes'
-import { progress, type Game } from '../game/game'
-import { integerText, notation, oddsText, rarityOf } from '../game/math'
+import { progress, rollRarity, type Game } from '../game/game'
+import { compactOddsText, integerText, notation, oddsText } from '../game/math'
 import { milestones } from '../game/progression'
 import { eras, owns, rankCost, researchById, researchEra, researchStatus } from '../game/research'
 import { BadgeCards, RarityLabel } from './shared'
@@ -34,7 +34,7 @@ export function Play({ game, rolling, onRoll, onResearch }: Props) {
   const era = researchEra(game.purchases)
   const title = roll ? notation(roll.expression) : '—'
   const visibleRoll = rolling ? game.recent[1] : roll
-  const rarity = visibleRoll ? rarityOf(visibleRoll.probability) : undefined
+  const rarity = visibleRoll ? rollRarity(visibleRoll) : undefined
   const milestoneId = milestones.find(id => !owns(game.purchases, id))
   const milestone = milestoneId ? researchById.get(milestoneId) : undefined
   const ready = milestone && researchStatus(milestone, progress(game), game.balance, game.lab) === 'available'
@@ -63,13 +63,13 @@ export function Play({ game, rolling, onRoll, onResearch }: Props) {
         <RollNumber key={roll?.index} text={title} rolling={rolling} />
         <div className="result-meta" aria-hidden="true">
           {visibleRoll ? <>
-            <RarityLabel probability={visibleRoll.probability} />
-            <span>{oddsText(visibleRoll.probability)}</span>
+            <RarityLabel tier={rollRarity(visibleRoll)} />
+            <span title={oddsText(visibleRoll.probability)}>{compactOddsText(visibleRoll.probability)}</span>
             <strong className="earned">+{integerText(visibleRoll.earned)} EP</strong>
           </> : <span>{rolling ? '\u00a0' : 'Roll to start'}</span>}
         </div>
         <span className="visually-hidden" role="status">{!rolling && visibleRoll
-          ? title + '. ' + rarity?.name + ', ' + oddsText(visibleRoll.probability) + '. Earned ' + integerText(visibleRoll.earned) + ' EP.'
+          ? title + '. ' + rarity?.name + '. Exact roll odds ' + compactOddsText(visibleRoll.probability) + '. Earned ' + integerText(visibleRoll.earned) + ' EP.'
           : ''}</span>
       </div>
 

@@ -1,7 +1,9 @@
 import { badgeIds, badgeRule, type Badge, type BadgeFamily, type BadgeId } from './attributes'
 import { newGame, progress, recentRollLimit, type Game, type Roll } from './game'
-import { CLASSICAL_MAX, EXPANDED_MAX, GENERATOR_VERSION, VAST_MAX } from './generator'
-import { depth, fraction, magnitude, rarities, type Expression } from './math'
+import { rarityEvent } from './economy'
+import { advancedFamilies, checkParameters, type AdvancedFamily, type GeneratorOptions } from './generation/config'
+import { CLASSICAL_MAX, EXPANDED_MAX, GENERATOR_VERSION, VAST_MAX, replay, sourceNames, type Source } from './generator'
+import { depth, fraction, magnitude, rarities, type Expression, type Fraction } from './math'
 import { meets, owns, rankCost, researchById } from './research'
 
 const maxSize = 1_000_000
@@ -21,7 +23,7 @@ function count(value: unknown, min = 0, max = Number.MAX_SAFE_INTEGER): number {
   return value
 }
 function decimal(value: unknown): bigint {
-  if (typeof value !== 'string' || !/^(0|[1-9][0-9]{0,255})$/.test(value)) return invalid()
+  if (typeof value !== 'string' || !/^(0|[1-9][0-9]{0,1023})$/.test(value)) return invalid()
   return BigInt(value)
 }
 function bool(value: unknown): boolean {
@@ -35,48 +37,103 @@ function expressionOf(value: unknown, remaining = 2): Expression {
   return { kind: item.kind, left: expressionOf(item.left, remaining - 1), right: expressionOf(item.right, remaining - 1) }
 }
 
+function configurationOf(value: unknown): GeneratorOptions {
+  const raw = object(value)
+  const specialization = raw.specialization
+  if (specialization !== null && specialization !== 'magnitude' && specialization !== 'rarity' && specialization !== 'efficiency') return invalid()
+  const options: GeneratorOptions = {
+    wide: bool(raw.wide), vast: bool(raw.vast), arithmetic: bool(raw.arithmetic), nesting: bool(raw.nesting),
+    anomaly: count(raw.anomaly), specialization,
+  }
+  if (raw.advanced !== undefined) {
+    options.advanced = {}
+    for (const [key, value] of Object.entries(object(raw.advanced))) {
+      const id = key as AdvancedFamily
+      if (!advancedFamilies.includes(id)) return invalid()
+      const params = object(value)
+      try {
+        options.advanced[id] = checkParameters(id, {
+          weight: count(params.weight), operandMax: count(params.operandMax),
+          complexity: count(params.complexity), digitBias: count(params.digitBias),
+        })
+      } catch { return invalid() }
+    }
+  }
+  return options
+}
+
+function matchesEncoded(raw: unknown, expected: unknown): boolean {
+  if (typeof expected === 'bigint') return raw === String(expected)
+  if (Array.isArray(expected)) {
+    return Array.isArray(raw) && raw.length === expected.length && expected.every((entry, i) => matchesEncoded(raw[i], entry))
+  }
+  if (expected !== null && typeof expected === 'object') {
+    const fields = object(raw)
+    const entries = Object.entries(expected)
+    return Object.keys(fields).length === entries.length && entries.every(([key, entry]) => Object.hasOwn(fields, key) && matchesEncoded(fields[key], entry))
+  }
+  return raw === expected
+}
+
+function legacyExpression(raw: unknown, source: Source): Expression {
+  const expression = expressionOf(raw)
+  if (source === 'classical' || source === 'expanded' || source === 'vast') {
+    if (expression.kind !== 'integer') return invalid()
+    const [low, high] = source === 'classical' ? [0n, CLASSICAL_MAX]
+      : source === 'expanded' ? [CLASSICAL_MAX + 1n, EXPANDED_MAX] : [EXPANDED_MAX + 1n, VAST_MAX]
+    if (expression.value < low || expression.value > high) return invalid()
+    return expression
+  }
+  if (source !== 'arithmetic' && source !== 'nested') return invalid()
+  const operand = (term: Expression) => term.kind === 'integer' && term.value >= 2n && term.value <= 999n
+  if ((expression.kind !== 'add' && expression.kind !== 'multiply') || !operand(expression.right)) return invalid()
+  const left = expression.left
+  if (source === 'arithmetic' ? !operand(left)
+    : (left.kind !== 'add' && left.kind !== 'multiply') || !operand(left.left) || !operand(left.right)) return invalid()
+  return expression
+}
+
 function rollOf(value: unknown, rolls: number, lifetime: bigint): Roll {
   const item = object(value)
-  const source = item.source
-  const expression = expressionOf(item.expression)
-  switch (source) {
-    case 'classical':
-    case 'expanded':
-    case 'vast': {
-      if (expression.kind !== 'integer') return invalid()
-      const [low, high] = source === 'classical' ? [0n, CLASSICAL_MAX]
-        : source === 'expanded' ? [CLASSICAL_MAX + 1n, EXPANDED_MAX] : [EXPANDED_MAX + 1n, VAST_MAX]
-      if (expression.value < low || expression.value > high) return invalid()
-      break
-    }
-    case 'arithmetic':
-    case 'nested': {
-      const operand = (term: Expression) => term.kind === 'integer' && term.value >= 2n && term.value <= 999n
-      if (expression.kind === 'integer' || !operand(expression.right)) return invalid()
-      const left = expression.left
-      if (source === 'arithmetic' ? !operand(left) : left.kind === 'integer' || !operand(left.left) || !operand(left.right)) return invalid()
-      break
-    }
-    default: return invalid()
+  const source = item.source as Source
+  if (typeof source !== 'string' || !Object.hasOwn(sourceNames, source)) return invalid()
+  const generatorVersion = count(item.generatorVersion, 1, GENERATOR_VERSION)
+  let expression: Expression
+  let evidence: { configuration: GeneratorOptions; ticket: bigint; event: ReturnType<typeof replay>['event']; probability: Fraction } | undefined
+  if (generatorVersion === 1) expression = legacyExpression(item.expression, source)
+  else {
+    const raw = object(item.generation)
+    const configuration = configurationOf(raw.configuration)
+    const ticket = decimal(raw.ticket)
+    let recovered: ReturnType<typeof replay>
+    try { recovered = replay(configuration, source, ticket) } catch { return invalid() }
+    if (!matchesEncoded(item.expression, recovered.expression)) return invalid()
+    expression = recovered.expression
+    evidence = { configuration, ticket, event: recovered.event, probability: recovered.probability }
   }
   const rawProbability = object(item.probability)
   const probability = fraction(decimal(rawProbability.numerator), decimal(rawProbability.denominator))
-  if (probability.numerator === 0n || probability.numerator > probability.denominator) return invalid()
+  if (probability.numerator === 0n || probability.numerator > probability.denominator ||
+    (evidence && !matchesEncoded(item.probability, evidence.probability))) return invalid()
   if (!Array.isArray(item.badges) || item.badges.length === 0 || item.badges.length > badgeIds.length) return invalid()
   const badges: Badge[] = item.badges.map(entry => {
     const raw = object(entry)
     if (!badgeIds.includes(raw.id as BadgeId)) return invalid()
     const reward = decimal(raw.reward)
-    if (reward === 0n) return invalid()
+    if (reward === 0n && (generatorVersion === 1 || (source !== 'arithmetic' && source !== 'nested'))) return invalid()
     const id = raw.id as BadgeId
     const level = id === 'nested' ? count(raw.level, 2, depth(expression)) : undefined
-    return { id, reward, ...(level ? { level } : {}) }
+    const metric = raw.metric === undefined ? undefined : decimal(raw.metric)
+    return { id, reward, ...(level ? { level } : {}), ...(metric === undefined ? {} : { metric }) }
   })
   if (new Set(badges.map(badge => badge.id)).size !== badges.length) return invalid()
   const earned = decimal(item.earned)
   const bonus = decimal(item.bonus)
   if (earned > lifetime || earned !== bonus + badges.reduce((sum, badge) => sum + badge.reward, 0n)) return invalid()
-  return { index: count(item.index, 1, rolls), expression, probability, source, badges, earned, bonus, generatorVersion: count(item.generatorVersion, 1, GENERATOR_VERSION) }
+  const generation = evidence && { configuration: evidence.configuration, ticket: evidence.ticket, event: rarityEvent(source, badges, evidence.event) }
+  if (generation && !matchesEncoded(object(item.generation).event, generation.event)) return invalid()
+  return { index: count(item.index, 1, rolls), expression, probability, source, generatorVersion,
+    ...(generation ? { generation } : {}), badges, earned, bonus }
 }
 
 const encode = (_: string, value: unknown) => typeof value === 'bigint' ? value.toString() : value
@@ -87,7 +144,7 @@ export function exportSave(game: Game) {
 
 function migrate(raw: Record<string, unknown>) {
   if (raw.schema === 1) return { ...raw, settings: { ...object(raw.settings), showBadgeOdds: false } }
-  if (raw.schema !== 2 && raw.schema !== 3 && raw.schema !== 4) return invalid('This save version is unsupported.')
+  if (raw.schema !== 2 && raw.schema !== 3 && raw.schema !== 4 && raw.schema !== 5) return invalid('This save version is unsupported.')
   return raw
 }
 
@@ -100,7 +157,7 @@ export function importSave(text: string, lab = false): Game {
   const rolls = count(raw.rolls)
   const lifetime = decimal(raw.lifetime)
   const savedBalance = decimal(raw.balance)
-  const legacySave = raw.schema !== 4
+  const legacySave = raw.schema === 1 || raw.schema === 2 || raw.schema === 3
   const legacyPricing = raw.schema === 1 || raw.schema === 2
   if (rolls === 0 ? lifetime !== 0n : lifetime < BigInt(rolls)) return invalid()
   const purchases: Game['purchases'] = {}
@@ -157,7 +214,7 @@ export function importSave(text: string, lab = false): Game {
   if (largest.some(roll => magnitude(roll.expression) === null)) return invalid()
   const settings = object(raw.settings)
   const game: Game = {
-    schema: 4, lab, rolls, lifetime, balance: lifetime - currentSpent, purchases, retainedResearch: [], discoveries, distribution, recent, rarest, highest, largest,
+    schema: 5, lab, rolls, lifetime, balance: lifetime - currentSpent, purchases, retainedResearch: [], discoveries, distribution, recent, rarest, highest, largest,
     settings: { animations: bool(settings.animations), reducedEffects: bool(settings.reducedEffects), showBadgeOdds: bool(settings.showBadgeOdds) },
   }
   const current = progress(game)

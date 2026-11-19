@@ -1,4 +1,6 @@
-import { depth, fraction, type Expression, type Fraction } from './math'
+import { depth, fraction, magnitude, type Expression, type Fraction } from './math'
+import { children } from './math/ast'
+import { ordinalDepth } from './math/ordinal'
 
 export type BadgeFamily = 'parity' | 'divisibility' | 'digits' | 'prime' | 'sequence' | 'mirror' | 'rhythm' | 'powers' | 'structure' | 'landmarks'
 type BadgeRule = { name: string; family: BadgeFamily; description: string; count?: number; base: bigint }
@@ -20,10 +22,24 @@ const rules = {
   addition: { name: 'Addition', family: 'structure', description: 'An expression with addition at the root', base: 5n },
   product: { name: 'Product', family: 'structure', description: 'An expression with multiplication at the root', base: 5n },
   nested: { name: 'Expression Depth', family: 'structure', description: 'A mathematical operation containing another operation', base: 3n },
+  difference: { name: 'Difference', family: 'structure', description: 'Subtraction at the root', base: 4n },
+  quotient: { name: 'Quotient', family: 'structure', description: 'Division at the root', base: 5n },
+  factorial: { name: 'Factorial', family: 'structure', description: 'Factorial at the root', base: 5n },
+  exponent: { name: 'Exponentiation', family: 'structure', description: 'Exponentiation at the root', base: 5n },
+  tower: { name: 'Tower height', family: 'structure', description: 'Number of terms in a right-associated tower', base: 6n },
+  hyperRank: { name: 'Hyperoperation rank', family: 'structure', description: 'Rank in the finite hyperoperation hierarchy', base: 6n },
+  tetrationHeight: { name: 'Tetration height', family: 'structure', description: 'Height of a tetration stack', base: 5n },
+  arrows: { name: 'Knuth arrow count', family: 'structure', description: 'Number of up-arrows', base: 7n },
+  chain: { name: 'Conway chain length', family: 'structure', description: 'Number of entries in the outer Conway chain', base: 8n },
+  ordinal: { name: 'Ordinal index depth', family: 'structure', description: 'Depth of the ordinal index in Cantor normal form', base: 9n },
+  busy: { name: 'Busy Beaver states', family: 'structure', description: 'Number of working states', base: 9n },
+  ackermann: { name: 'Ackermann rank', family: 'structure', description: 'First argument of the Ackermann–Péter function', base: 9n },
+  repeatedOperand: { name: 'Repeated operands', family: 'structure', description: 'Repeated integer operands at the same level', base: 2n },
+  longInteger: { name: 'Digit length', family: 'digits', description: 'Length of an extended integer', base: 4n },
 } satisfies Record<string, BadgeRule>
 
 export type BadgeId = keyof typeof rules
-export type Badge = { id: BadgeId; reward: bigint; level?: number }
+export type Badge = { id: BadgeId; reward: bigint; level?: number; metric?: bigint }
 export const badgeRule = (id: BadgeId): BadgeRule => rules[id]
 export const badgeIds = Object.keys(rules) as BadgeId[]
 
@@ -74,7 +90,7 @@ export function isPrime(value: bigint): boolean | null {
 }
 
 function isSquare(value: bigint) {
-  if (value < 2n) return true
+  if (value < 2n) return value >= 0n
   let upper = 1n << BigInt(Math.ceil(value.toString(2).length / 2))
   for (;;) {
     const next = (upper + value / upper) / 2n
@@ -93,28 +109,51 @@ export function badgeReference(id: BadgeId): Fraction | null {
   return count === undefined ? null : fraction(BigInt(count), 1_000_001n)
 }
 
-export function rewardFor(id: BadgeId, level = 1, probability = badgeReference(id)) {
+export function rewardFor(id: BadgeId, level = 1, probability = badgeReference(id), metric?: bigint) {
   const rule = badgeRule(id)
   let rarityBonus = 0n
   if (probability?.numerator) {
     for (let bound = probability.numerator * 10n; bound <= probability.denominator; bound *= 10n) rarityBonus++
   }
-  return rule.base + rarityBonus + BigInt(level - 1)
+  return rule.base + rarityBonus + BigInt(level - 1) + (metric === undefined ? 0n : BigInt(metric.toString().length - 1))
 }
 
 export const initialFamilies: readonly BadgeFamily[] = ['parity', 'divisibility', 'digits', 'prime', 'sequence', 'mirror', 'landmarks']
 
-export function evaluateAttributes(expression: Expression, families: readonly BadgeFamily[]): Badge[] {
+export function evaluateAttributes(expression: Expression, families: readonly BadgeFamily[], includeExact = false, legacyShape = false): Badge[] {
   const result: Badge[] = []
-  const add = (id: BadgeId, level?: number) => result.push({ id, reward: rewardFor(id, level), ...(level ? { level } : {}) })
-  if (expression.kind !== 'integer') {
-    add(expression.kind === 'add' ? 'addition' : 'product')
-    const nesting = depth(expression)
-    if (nesting > 1) add('nested', nesting)
-    return result
+  const add = (id: BadgeId, level?: number, metric?: bigint) => result.push({
+    id, reward: rewardFor(id, level, undefined, metric),
+    ...(level ? { level } : {}), ...(metric === undefined ? {} : { metric }),
+  })
+  const values = children(expression).flatMap(term => term.kind === 'integer' ? [term.value] : [])
+  switch (expression.kind) {
+    case 'integer': break
+    case 'add': add('addition'); break
+    case 'multiply': add('product'); break
+    case 'subtract': add('difference'); break
+    case 'divide': add('quotient'); break
+    case 'factorial': add('factorial'); break
+    case 'power': add('exponent'); break
+    case 'tower': add('tower', undefined, BigInt(expression.terms.length)); break
+    case 'hyper':
+      add('hyperRank', undefined, expression.rank)
+      if (expression.rank === 4n) add('tetrationHeight', undefined, expression.height)
+      break
+    case 'arrow': add('arrows', undefined, expression.rank); break
+    case 'chain': add('chain', undefined, BigInt(expression.terms.length)); break
+    case 'fgh': add('ordinal', undefined, BigInt(ordinalDepth(expression.index))); break
+    case 'busy': add('busy', undefined, expression.states); break
+    case 'ackermann': add('ackermann', undefined, expression.rank); break
   }
-  const value = expression.value
-  const digits = value.toString()
+  const nesting = depth(expression)
+  if (nesting > 1) add('nested', nesting)
+  if (includeExact && !legacyShape && values.length > new Set(values).size) add('repeatedOperand')
+  if (expression.kind !== 'integer' && !includeExact) return result
+  const value = expression.kind === 'integer' ? expression.value : magnitude(expression)
+  if (value === null) return result
+  const digits = (value < 0n ? -value : value).toString()
+  if (includeExact && digits.length >= 26 && expression.kind === 'integer') add('longInteger', undefined, BigInt(digits.length))
   add(value % 2n === 0n ? 'even' : 'odd')
   if (value % 3n === 0n) add('three')
   if (value % 5n === 0n) add('five')
@@ -123,7 +162,8 @@ export function evaluateAttributes(expression: Expression, families: readonly Ba
   if (/(\d)\1/.test(digits)) add('repeat')
   if (digits.length > 1 && digits === [...digits].reverse().join('')) add('palindrome')
   if (consecutive.test(digits)) add('consecutive')
-  if (fibonacci.has(value)) add('fibonacci')
+  if (fibonacci.has(value) || (value >= 10n ** 25n &&
+      (isSquare(5n * value * value + 4n) || isSquare(5n * value * value - 4n)))) add('fibonacci')
   if (constants.has(value)) add('constant')
   if (digits.length > 1 && [...digits].every(digit => digit === digits[0])) add('uniform')
   if (families.includes('rhythm') && /^(\d{2,}?)\1+$/.test(digits)) add('rhythm')

@@ -19,7 +19,7 @@ npm ci
 npm run dev
 ```
 
-Open the address Vite prints, usually `http://localhost:5173`. Use **Roll** for one draw and **Research** to spend EP. The full-screen research map supports drag panning, scroll zoom, and a discipline picker. Each node shows its research type and uses the matching border color. Select a node to see its requirements and connections. Collection stores notable results, and Settings manages animations and local save import, export, and reset.
+Open the address Vite prints, usually `http://localhost:5173`. Use **Roll** or press **Space** for one draw. Open **Research** to spend EP. The full-screen research map supports drag panning, scroll zoom, and a discipline picker. Each node shows its research type and uses the matching border color. Select a node to see its requirements and connections. Collection stores notable results, and Settings manages animations and local save import, export, and reset.
 
 `npm run build` produces a static site in `dist/`. `npm run preview` serves it locally. Relative asset paths work at the GitHub Pages project URL.
 

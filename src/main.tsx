@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BarChart3, BookOpen, Dices, GitBranch, Settings2, Zap } from 'lucide-react'
 import { manualRoll, newGame, purchase, refund, type Game } from './game/game'
 import { integerText } from './game/math'
 import { loadLocal, saveLocal } from './game/save'
@@ -12,14 +11,9 @@ import { Mark } from './ui/shared'
 import './style.css'
 
 const lab = import.meta.env.DEV && import.meta.env.MODE === 'lab'
-const pages = [
-  { name: 'Play', icon: Dices },
-  { name: 'Research', icon: GitBranch },
-  { name: 'Collection', icon: BookOpen },
-  { name: 'Statistics', icon: BarChart3 },
-  { name: 'Settings', icon: Settings2 },
-] as const
-type Page = typeof pages[number]['name']
+const pages = ['Play', 'Research', 'Collection', 'Statistics', 'Settings'] as const
+type Page = typeof pages[number]
+const rollRevealMs = 300
 
 function App() {
   const [loaded] = useState(() => loadLocal(lab))
@@ -50,7 +44,7 @@ function App() {
       timeout.current = setTimeout(() => {
         timeout.current = null
         setRolling(false)
-      }, 595)
+      }, rollRevealMs)
     }
   }
 
@@ -63,11 +57,10 @@ function App() {
   return <div className={'app' + (page === 'Research' ? ' research-app' : '') + (game.settings.reducedEffects ? ' reduced-effects' : '')}>
     <header className="app-header"><div className="header-inner">
       <button className="brand" onClick={() => open('Play')} aria-label="gRNGdle home"><Mark /><strong>gRNGdle</strong></button>
-      <nav aria-label="Main navigation">{pages.map(item => <button key={item.name} aria-current={page === item.name ? 'page' : undefined} onClick={() => open(item.name)}>
-        <item.icon size={17} /><span>{item.name}</span></button>)}</nav>
-      <div className="wallet" aria-label={'EP balance ' + integerText(game.balance)}><Zap size={17} fill="currentColor" /><strong>{integerText(game.balance)}</strong><span>EP</span></div>
+      <nav aria-label="Main navigation">{pages.map(item => <button key={item} aria-current={page === item ? 'page' : undefined} onClick={() => open(item)}>{item}</button>)}</nav>
+      <div className="wallet" aria-label={'EP balance ' + integerText(game.balance)}><strong>{integerText(game.balance)}</strong><span>EP</span></div>
     </div></header>
-    <main className={page === 'Research' ? 'research-main' : undefined}>
+    <main className={page === 'Research' ? 'research-main' : page === 'Play' ? 'play-main' : 'secondary-main'}>
       {lab && <div className="notice">Developer lab · Reduced research costs and badge requirements · Isolated save</div>}
       {warning && <div className="notice" role="alert">{warning}</div>}
       {page === 'Play' && <Play game={game} rolling={rolling} onRoll={clickRoll} onResearch={id => open('Research', id)} />}

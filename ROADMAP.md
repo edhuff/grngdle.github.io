@@ -1,24 +1,50 @@
-# gRNGdle development roadmap
+# Grand Research Tree status
 
-The game can generate all the notation families below. [Mathematical conventions and limits](MATHEMATICS.md) describes the exact and symbolic capabilities.
+| Era | Playable studies | Target | Current focus |
+| --- | ---: | ---: | --- |
+| 0 · Classical Number Theory | 140 | 140 | Seven complete clusters, the Fundamental Theorem of Arithmetic, Pattern Synthesis, and Classical Synthesis |
+| I · Numerical Expansion | 21 | 155 | Expanded decimal bands, sampling audits, and founding doctrine studies |
+| II · Arithmetic and Exponentiation | 28 | 170 | Exact arithmetic, long integers, exponentiation, and expression inspection |
+| III · Towers and Tetration | 18 | 170 | Tower composition, configurable heights and bases, and tower inspection |
+| IV · Hyperoperations | 17 | 190 | Finite ranks, up-arrow counts, operands, and occurrence weights |
+| V · Recursive Googology | 12 | 190 | Conway chain lengths, nesting incentives, and sampling |
+| VI · Ordinal Hierarchies | 14 | 200 | Ordinal exponents and coefficients, Cantor normal form, and fundamental-sequence inspection |
+| VII · Extreme Googology | 14 | 185 | Busy Beaver states, Ackermann–Péter arguments and ranks, and computation challenges |
+| **Total** | **264** | **1,400** | **1,136 studies remain to be authored** |
 
-| Cumulative milestone | Active play target | Next work |
-| --- | --- | --- |
-| First integer expansion | 1.5–2 h | Broaden the Classical research region with optional analysis and efficiency branches. |
-| Advanced arithmetic | 4–12 h | Add more grammar variants when their domains and odds can be established. |
-| Exponentiation and factorials | 12–24 h | Add more operand distributions and improve small-support equivalent-value counting. |
-| Power towers and tetration | 24–50 h | Expand certified magnitude comparisons. |
-| Higher hyperoperations | 50–100 h | Extend research for higher ranks and arrow counts. |
-| Conway chained arrows | 100–180 h | Add more nested forms with proven-positive terms. |
-| Ordinal-indexed functions | 180–300 h | Expand the Cantor normal form grammar and hierarchy-specific analysis. |
-| Extreme googology | 300–500+ h | Add further established functions and certified bounds. |
+The 140 Classical studies are split into Numerical Properties (24), Digit Pattern Analysis (24), EP Economics (22), Probability and Luck (18), Discovery and Collection (18), Mathematical Analysis (16), and Convergence and Gateways (18). Optional discovery challenges require recorded badge hits and add permanent reward or archive improvements. The three doctrines are counted within the totals.
 
-## Scale the research network
+## Balance
 
-Build toward 1,400+ studies in eight disciplines. Give every era an entry breakthrough and several paths through different disciplines that rejoin at the next milestone. Add studies in data modules grouped by era, with stable node IDs, graph coordinates, prereq rules, and reusable effect types. Validate IDs, dependencies, reachability, costs, and layout in CI. Retain earlier generator choices in each era and version changes to their distributions.
+The offline simulator uses production prices, the live reward function, seeded rolls, and three opening purchase policies. The reference run samples 250,000 unmodified Classical outcomes, runs nine opening trials, and continues three trials through the mathematical gateways. It assumes 7.5 seconds per action. Times are cumulative and exclude time away from the game.
 
-As the map grows, add discipline and era search, jump links, branch collapsing, and viewport culling while keeping the selected study’s direct prerequisites visible. Give each major unlock an inspection view for its exact sampling rules and mathematical domains.
+| Opening strategy | Median rolls to expansion | Estimated active hours | Median interval between study purchases |
+| --- | ---: | ---: | ---: |
+| Direct gateway | 5,425 | 11.3 | 10.1 min |
+| Additional badge investments | 4,850 | 10.1 | 8.7 min |
+| Collection and odds | 5,490 | 11.4 | 6.4 min |
 
-## Validate pacing and collection quality
+| Later milestone | Median rolls | Estimated active hours |
+| --- | ---: | ---: |
+| Expression Grammar | 6,344 | 13.2 |
+| Nested Arithmetic | 7,694 | 16.0 |
+| Arbitrary Precision | 9,737 | 20.3 |
+| Exponentiation | 13,880 | 28.9 |
+| Power Towers | 19,163 | 39.9 |
+| Hyperoperations | 34,829 | 72.6 |
+| Conway Chained Arrows | 54,984 | 114.5 |
+| Ordinal Hierarchy | 94,380 | 196.6 |
+| Extreme Googology | 155,364 | 323.7 |
 
-Simulate alternative purchase routes and specialization choices, then compare them with observed play cadence. Tune minor purchases and milestones separately. Keep all EP tied to individual player actions and track active hours as estimates derived from manual rolls. Extend records with generator-version-aware probability fixtures, structural badges, and safe certified comparisons. Benchmark archive and map performance and migrate saves with tested fixtures whenever the AST, probability, or research schema changes.
+The three later trials took 114,488–278,002 rolls to reach Extreme Googology. Two used the direct routes and one pursued alternate keystones. The estimates cover these gateway routes.
+
+Faster actions and different EP investments shorten the estimates. Individual purchase intervals vary because early study prices, optional upgrades, and keystones serve different roles. The current later-era routes reach the last existing generator well before the intended full-tree timescale. The grant and mastery paths beyond the gateways remain optional.
+
+## Next development
+
+1. Complete the Numerical Expansion region with independently tunable integer intervals, researched digit distributions and event odds, and more mathematical analysis for values beyond ten million. Continue authoring era clusters that introduce a concrete rule, interaction, or analytical capability.
+2. Add richer exact representations for mixed recursive and ordinal forms with a well-defined domain and auditable generator odds. The current hierarchy grammar covers selected Cantor normal form indices below ε₀. Broader hierarchies, larger machine classes, and further Busy Beaver proofs need mathematical implementation before they can become purchasable research.
+3. Calibrate longer advanced paths as more real purchases fill the intervals between gateways. Add simulations of optional cluster mastery and doctrine strategies and compare projected times with real play cadence.
+4. Rebenchmark regional layout, archives, and save migrations as the authored tree grows. The tests exercise layout and viewport filtering for a synthetic 1,400-node fixture, while the browser smoke tests exercise the actual playable atlas.
+
+See [MATHEMATICS.md](MATHEMATICS.md) for current conventions and where the engine returns symbolic or unknown results.

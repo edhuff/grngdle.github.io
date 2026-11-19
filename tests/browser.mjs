@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright-core'
 import { manualRoll, newGame, purchase } from '../src/game/game.ts'
 import { distribution, seededWords } from '../src/game/generator.ts'
-import { classicalRoute, effectsOf, rankCost, research, researchById } from '../src/game/research.ts'
+import { classicalRoute, effectsOf, purchaseCost, rankCost, researchById, researchRoute } from '../src/game/research.ts'
 import { exportSave } from '../src/game/save.ts'
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', args: ['--disable-dev-shm-usage'] })
@@ -18,7 +18,7 @@ try {
 
   await page.goto(process.argv[2] ?? 'http://localhost:5173', { waitUntil: 'networkidle' })
   await heading('Roll chamber').waitFor()
-  assert.match(await page.getByRole('button', { name: 'Explore research' }).textContent(), /6,250 EP/)
+  assert.match(await page.getByRole('button', { name: 'Explore research' }).textContent(), /14,500 EP/)
   await page.waitForTimeout(700)
   assert.equal(await saved(), null)
   await roll().click()
@@ -81,6 +81,23 @@ try {
   assert.equal((await saved()).purchases.yield, 1)
   assert.equal(BigInt((await saved()).balance), BigInt(beforeBuy.balance) - yieldCost)
 
+  await page.getByRole('button', { name: 'Bookmark study' }).click()
+  assert.deepEqual((await saved()).bookmarks, ['yield'])
+  await page.getByRole('button', { name: 'Close research details' }).click()
+  await page.getByLabel('Filter research').selectOption('bookmarks')
+  await page.getByLabel('Research search results').getByRole('button', { name: /Yield Calibration/ }).click()
+  await heading('Yield Calibration').waitFor()
+  await page.getByRole('button', { name: 'Close research details' }).click()
+  await page.getByRole('button', { name: 'Eras', exact: true }).click()
+  const eras = page.getByLabel('Era overview')
+  assert.equal(await eras.locator('article').count(), 8)
+  assert(await eras.getByRole('button', { name: /Extreme Googology/ }).isDisabled())
+  await eras.getByRole('button', { name: /Classical Era/ }).click()
+  const search = page.getByLabel('Search research')
+  await search.fill('fundamental theorem')
+  await page.getByLabel('Research search results').getByRole('button', { name: /Fundamental Theorem of Arithmetic/ }).click()
+  await heading('Fundamental Theorem of Arithmetic').waitFor()
+  assert(await page.locator('.edge-highlight').count() > 0)
   await page.getByRole('button', { name: 'Close research details' }).click()
   assert.equal(await page.getByRole('complementary', { name: 'Research details' }).count(), 0)
 
@@ -145,23 +162,20 @@ try {
     await lab.getByText(/Developer lab/).waitFor()
     await lab.getByRole('button', { name: 'Explore research' }).click()
     await lab.getByRole('heading', { name: 'Beyond a Million' }).waitFor()
-    assert.equal(await lab.locator('.edge-highlight[data-to="expansion"]').count(), 2)
-    assert.equal(await lab.locator('[data-from="yield"][data-to="catalog"]').count(), 1)
-    assert.equal(await lab.getByRole('button', { name: /Field Journal|Archive Calibration|Roll Inspector|Discovery Registry/ }).count(), 0)
+    assert.equal(await lab.locator('.edge-highlight[data-to="expansion"]').count(), 1)
     assert.equal(await lab.getByText(/manual rolls/, { exact: false }).count(), 0)
-    await lab.getByRole('button', { name: 'Classical Review', exact: true }).click()
-    assert.equal(await lab.locator('.edge-highlight[data-to="classical-review"]').count(), 3)
-    await lab.getByRole('button', { name: 'Fit graph' }).click()
-    await lab.getByRole('button', { name: /^Beyond a Million/ }).click()
-    const expansionCost = rankCost(researchById.get('expansion'), 0, true)
+    await lab.getByRole('button', { name: 'Classical Synthesis', exact: true }).click()
+    assert(await lab.locator('.edge-highlight[data-to="classical-synthesis"]').count() >= 3)
+    await lab.getByLabel('Jump to research').selectOption('expansion')
+    const expansionCost = purchaseCost(researchById.get('expansion'), fixture.purchases, true)
     await lab.getByRole('button', { name: `Research · ${expansionCost} EP` }).click()
-    assert.equal(await lab.locator('[data-from="efficiency-focus"][data-to="arithmetic"]').count(), 1)
-    await lab.getByRole('button', { name: 'Fit graph' }).click()
-    await lab.getByRole('button', { name: /^Efficiency Focus/ }).click()
+    await lab.getByRole('button', { name: 'Confirm gateway' }).click()
+    await lab.getByLabel('Jump to research').selectOption('efficiency-focus')
     await lab.getByRole('button', { name: `Research · ${rankCost(researchById.get('efficiency-focus'), 0, true)} EP` }).click()
     await lab.getByLabel('Jump to research').selectOption('arithmetic')
     const arithmeticCost = rankCost(researchById.get('arithmetic'), 0, true)
     await lab.getByRole('button', { name: `Research · ${arithmeticCost} EP` }).click()
+    await lab.getByRole('button', { name: 'Confirm gateway' }).click()
     await lab.getByRole('navigation').getByRole('button', { name: 'Statistics' }).click()
     await lab.getByText('Sum or product', { exact: true }).waitFor()
     await lab.getByRole('navigation').getByRole('button', { name: 'Play' }).click()
@@ -176,7 +190,8 @@ try {
     let lateGame = newGame(true)
     lateGame.settings.animations = false
     const lateWord = seededWords(234)
-    const routeToExtreme = research.filter(node => (!node.refundable || node.id === 'efficiency-focus') && node.id !== 'anomaly')
+    const routeToExtreme = [...researchRoute('extreme-googology'), 'decimal-analysis', 'discovery-ledger', 'badge-index']
+      .map(id => researchById.get(id)).filter(node => (!node.refundable || node.id === 'efficiency-focus') && node.id !== 'anomaly')
     for (let index = 0; index < 2000 && !lateGame.purchases['extreme-googology']; index++) {
       lateGame = manualRoll(lateGame, lateWord)
       for (const node of routeToExtreme) if (!lateGame.purchases[node.id]) lateGame = purchase(lateGame, node.id)
@@ -203,6 +218,9 @@ try {
     await late.getByText(/Exact expression odds/).waitFor()
     await late.getByText(/Equivalent-value odds unknown/).waitFor()
     await late.getByText(/Exact value Unknown · Proven lower bound 107/).waitFor()
+    assert(await late.getByLabel('Filter by badge').isVisible())
+    await late.getByLabel('Filter by badge').selectOption('busy')
+    assert.equal(await late.locator('.record-row').count(), lateGame.recent.filter(roll => roll.source === 'busy').length + 1)
     assert(await late.evaluate(() => document.documentElement.scrollWidth === innerWidth))
     console.log('Developer lab smoke passed: early unlocks, extreme rolls, symbolic inspector, and isolated saves.')
   }

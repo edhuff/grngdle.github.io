@@ -121,7 +121,7 @@ test('every band has positive weight, a deterministic replay, and normalized pro
     assert(notation(last.expression).length < 1100)
     const evaluated = evaluate(last.expression)
     assert.notEqual(evaluated.status === 'unknown' && evaluated.reason, 'domain', band.id)
-    if (band.id !== 'digits') assert.deepEqual(last.probability, fraction(band.weight, total * band.outcomes))
+    if (band.id !== 'digits' && band.id !== 'classical') assert.deepEqual(last.probability, fraction(band.weight, total * band.outcomes))
     assert(compareProbability(first.probability, first.event.probability) <= 0)
     assert.throws(() => replay(full, band.id, band.domain.tickets), /ticket/)
   }
@@ -133,7 +133,7 @@ test('maximum research tuning is stable across purchase order', () => {
   const first = effectsOf(Object.fromEntries(ranked)).generator
   const reversed = effectsOf(Object.fromEntries([...ranked].reverse())).generator
   assert.deepEqual(first, reversed)
-  assert.equal(first.advanced?.digits?.complexity, 136)
+  assert.equal(first.advanced?.digits?.complexity, 144)
   assert.equal(first.advanced?.arrows?.complexity, 22)
   const { bands } = distribution(first)
   for (const id of ['digits', 'arrows'] as const) {

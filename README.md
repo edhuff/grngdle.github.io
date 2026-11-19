@@ -1,14 +1,14 @@
 # gRNGdle
 
-A browser-based, manual RNG collection game about the mathematics of large numbers. The prototype starts with a uniform roll from **0 through 1,000,000**. Find mathematical attributes, earn Expression Points (EP), and spend them on research. The research tree contains **51 studies across eight disciplines**. All branches start at Yield Calibration and contribute to a milestone, with 33 studies on the route through the first expansion.
+A manual RNG collection game about the mathematics of large numbers. Start with a uniform integer from **0 through 1,000,000**, discover mathematical properties, and spend Expression Points (EP) on research. The playable atlas contains **264 studies across nine disciplines and eight eras**, including the full **140-study Classical Era**.
 
 ## Play on GitHub Pages
 
-Open [gRNGdle](https://edhuff.github.io/grngdle.github.io/). GitHub Pages serves the static site from the root of `main`.
+Open [gRNGdle](https://edhuff.github.io/grngdle.github.io/). Click **Roll** or press **Space** for one draw. Research spends earned EP and changes what future manual rolls can produce. Collection and Statistics can display additional analyses, observations, and records as you research them.
 
-Before pushing changes to the site, run `npm run build:pages` and commit the generated root `index.html` and `pages-assets/` folder along with the source changes. Edit the HTML template in `src/index.html`. GitHub Pages publishes the committed site after the push.
+In Research, drag to pan and scroll or use the buttons to zoom. **Eras** opens the global view. Region views show clusters and prerequisite links, and selecting a study opens its requirements and purchase controls. Search covers unlocked eras and can filter by discipline, affordability, and bookmarks. Major breakthroughs and doctrine refunds ask for confirmation.
 
-To carry over local progress, export your save in Settings on the local site and import it on GitHub Pages. Browser saves are scoped to the site origin.
+GitHub Pages serves the static site from the root of `main`. Run `npm run build:pages` and commit the generated `index.html` and `pages-assets/` with source changes. Make HTML edits in `src/index.html`. Browser saves are scoped to the site origin, and Settings supports export, import, and reset.
 
 ## Develop locally
 
@@ -19,50 +19,37 @@ npm ci
 npm run dev
 ```
 
-Open the address Vite prints, usually `http://localhost:5173`. Use **Roll** or press **Space** for one draw. Open **Research** to spend EP. The full-screen research map supports drag panning, scroll zoom, and shortcuts to the starting study and visible milestones. Each node shows its research type and uses the matching border color. Select a node to see its requirements and connections. Collection stores notable results, and Settings manages animations and local save import, export, and reset.
-
-`npm run build` produces a static site in `dist/`. `npm run preview` serves it locally. Relative asset paths work at the GitHub Pages project URL.
+Open the address Vite prints. `npm run build` produces a static site in `dist/`. `npm run preview` serves it locally. Assets also resolve at the GitHub Pages project path.
 
 ## Playable progression
 
-- **Classical Era** — Uniform integers, number-theory and digit-pattern badges, and branches that converge on Beyond a Million.
-- **Numerical Expansion** — Research opens separate integer bands through one trillion and then through 10²⁴. The Classical band remains available.
-- **Symbolic progression** — The tree continues from exact arithmetic and long integers through exponentiation, towers, hyperoperations, Conway chains, ordinal-indexed hierarchies, and extreme googology.
-- **Collection** — Every player can inspect roll values and expression depth. The game remembers up to 90 recent rolls.
-- **Rarity** — The inspector shows separate odds for the exact expression and its rarity event, plus equivalent-value odds where they can be established.
+- **Classical Era.** Seven clusters cover number theory, digit patterns, economics, probability, discovery, analysis, and convergence. The gateway dependency map has 43 study candidates before the breakthrough, with alternate final reviews. Beyond a Million initially opens a band from 1,000,001 through 10,000,000 at 13% weight along the direct route.
+- **Later eras.** Research widens the integer range and opens exact arithmetic, powers, towers, tetration, hyperoperations, Conway chains, ordinal-indexed hierarchies, Busy Beaver, and Ackermann–Péter. Later clusters add sample weights, operand and structure limits, inspection tools, and EP effects.
+- **Doctrines.** Magnitude, Rarity, and Economy each have 20 studies. One doctrine can be active at a time. Refunds return the prices actually paid for affected doctrine studies, including discounts. Permanent mathematical research and recorded discoveries survive a change.
+- **Saves.** Schema 6 records exact EP payments, observed badge and generator counts, and bookmarks. Earlier saves retain purchased mathematical studies and recorded history. Players who already had the old expansion keep its through-one-trillion range. Where earlier saves did not track specific observations, their new counters start with the retained rolls.
 
-See [Mathematical conventions and limits](MATHEMATICS.md) for the complete family and research table.
+See [MATHEMATICS.md](MATHEMATICS.md) for mathematical conventions and computational limits and [ROADMAP.md](ROADMAP.md) for exact era counts, simulation results, and remaining work.
 
 ## Architecture
 
 | Module | Responsibility |
 | --- | --- |
-| `src/game/math/` | ASTs, notation, ordinal arithmetic, bounded exact evaluation, and magnitude proofs |
-| `src/game/generation/` and `generator.ts` | Research configuration, ranked domains, seeded sampling, and exact odds |
-| `src/game/attributes.ts` and `economy.ts` | Integer and expression rules, badge probabilities, and research-modified EP |
-| `src/game/research.ts` | Declarative studies, validated dependency graphs, rank costs, unlocks, and milestones |
-| `src/game/game.ts` and `save.ts` | Immutable game transitions, discovery records, schema validation, migrations, and browser storage |
-| `src/ui/` | Roll chamber, interactive research graph, records, statistics, and settings |
+| `src/game/research.ts` and `src/game/research/` | Authored studies, AND/OR/count and discovery or EP prerequisites, doctrine exclusivity, rank prices, and effect folding |
+| `src/game/math/` and `src/game/generation/` | Symbolic ASTs, bounded evaluation and comparisons, configured sampling, exact probabilities, and replay |
+| `src/game/attributes.ts`, `research-properties.ts`, and `economy.ts` | Integer and structural badges, conditional Classical badge odds, and manual-roll payouts |
+| `src/game/game.ts` and `save.ts` | Purchases and refunds, research payments, roll records, migrations, and validation |
+| `src/ui/` | Full-field viewport-culled atlas, roll chamber, collections, mathematical inspection, and statistics |
 
-## Testing and balance
+The atlas derives node positions from prerequisite depth and cluster membership. Clusters and rank completion are derived from persisted purchases. Add effects to the discriminated union in `src/game/research/model.ts` and apply them through the existing rule systems. A study with a declared unavailable capability has a disabled purchase state.
+
+## Tests and developer lab
 
 ```bash
 npm test
-npm run balance
 npm run validate:generation
+npm run balance -- 250000 9 7.5 3
 npm run dev:lab -- --port 5174
-```
-
-The developer server lowers research costs and badge requirements. It uses a separate save and still requires a manual action for each roll. The seeded balance simulator runs from the command line and is excluded from the browser app.
-
-With the regular server running, run `npm run test:browser` for a Chromium smoke test. Set `CHROMIUM_PATH` to use a Chromium executable outside `/usr/bin/chromium`. Pass the regular and developer server addresses to also test both mathematical unlocks in the browser.
-
-```bash
 npm run test:browser -- http://localhost:5173 http://localhost:5174
 ```
 
-Milestones unlock when their research prerequisites are met and you can afford their EP cost. In a simulation with 250,000 base draws and 32 progression trials, the median first expansion took **851 rolls (1.8 h)** at an assumed **7.5 active seconds per roll**. Using Efficiency Focus after the first expansion, later medians were **5.0 h** for symbolic arithmetic, **9.2 h** for nested arithmetic, and **15.5 h** for arbitrary precision. Play time varies with purchase order, roll rewards, and cadence.
-
-Older saves keep their roll history and existing studies as they move to the connected tree. Purchases of retired Discovery studies are refunded in EP. Earlier pricing rebates still apply.
-
-See [ROADMAP.md](ROADMAP.md) for the 1,400-study plan.
+The balance arguments are base samples, Classical trials, active seconds per manual roll, and trials continuing after Classical. The lab lowers prices and discovery requirements, uses an isolated save, and still requires one action per roll. Offline simulations are command-line tools. Use `npm run measure:badges` to regenerate exact Classical reference frequencies after changing a badge predicate. Set `CHROMIUM_PATH` if Chromium lives outside `/usr/bin/chromium`.

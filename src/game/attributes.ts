@@ -1,10 +1,13 @@
 import { depth, fraction, magnitude, type Expression, type Fraction } from './math'
 import { children } from './math/ast'
+import { classicalFrequencies } from './generation/classical-frequencies'
 import { ordinalDepth } from './math/ordinal'
+import { integerFacts, researchProperties, type PropertyId } from './research-properties'
 
 export type BadgeFamily = 'parity' | 'divisibility' | 'digits' | 'prime' | 'sequence' | 'mirror' | 'rhythm' | 'powers' | 'structure' | 'landmarks'
 type BadgeRule = { name: string; family: BadgeFamily; description: string; count?: number; base: bigint }
 const rules = {
+  ...researchProperties,
   even: { name: 'Even', family: 'parity', description: 'Divisible by 2', count: 500001, base: 1n },
   odd: { name: 'Odd', family: 'parity', description: 'Leaves remainder 1 when divided by 2', count: 500000, base: 1n },
   three: { name: 'Triple', family: 'divisibility', description: 'Divisible by 3', count: 333334, base: 1n },
@@ -104,9 +107,29 @@ for (let a = 0n, b = 1n; a < 10n ** 25n; [a, b] = [b, a + b]) fibonacci.add(a)
 const constants = new Set([314159n, 271828n, 161803n])
 const consecutive = /012|123|234|345|456|567|678|789|987|876|765|654|543|432|321|210/
 
-export function badgeReference(id: BadgeId): Fraction | null {
-  const count = badgeRule(id).count
-  return count === undefined ? null : fraction(BigInt(count), 1_000_001n)
+const referenceOdds = new Map<BadgeId, Fraction>()
+for (const id of badgeIds) {
+  const count = classicalFrequencies[id]?.reduce((sum, hits) => sum + hits, 0) ?? 0
+  if (count) referenceOdds.set(id, fraction(BigInt(count), 1_000_001n))
+}
+
+const weightedReferences = new WeakMap<readonly number[], Map<BadgeId, Fraction | null>>()
+
+export function badgeReference(id: BadgeId, terminal?: readonly number[]): Fraction | null {
+  const baseline = referenceOdds.get(id)
+  if (!terminal || !baseline) return baseline ?? null
+  let profile = weightedReferences.get(terminal)
+  if (!profile) {
+    profile = new Map()
+    weightedReferences.set(terminal, profile)
+  }
+  const cached = profile.get(id)
+  if (cached !== undefined) return cached
+  const count = classicalFrequencies[id]!.reduce((sum, hits, digit) => sum + hits * (16 + terminal[digit]), 0)
+  const total = terminal.reduce((sum, weight, digit) => sum + (16 + weight) * (digit ? 100_000 : 100_001), 0)
+  const probability = fraction(BigInt(count), BigInt(total))
+  profile.set(id, probability)
+  return probability
 }
 
 export function rewardFor(id: BadgeId, level = 1, probability = badgeReference(id), metric?: bigint) {
@@ -120,7 +143,7 @@ export function rewardFor(id: BadgeId, level = 1, probability = badgeReference(i
 
 export const initialFamilies: readonly BadgeFamily[] = ['parity', 'divisibility', 'digits', 'prime', 'sequence', 'mirror', 'landmarks']
 
-export function evaluateAttributes(expression: Expression, families: readonly BadgeFamily[], includeExact = false, legacyShape = false): Badge[] {
+export function evaluateAttributes(expression: Expression, families: readonly BadgeFamily[], includeExact = false, legacyShape = false, properties: ReadonlySet<PropertyId> = new Set()): Badge[] {
   const result: Badge[] = []
   const add = (id: BadgeId, level?: number, metric?: bigint) => result.push({
     id, reward: rewardFor(id, level, undefined, metric),
@@ -168,5 +191,12 @@ export function evaluateAttributes(expression: Expression, families: readonly Ba
   if (digits.length > 1 && [...digits].every(digit => digit === digits[0])) add('uniform')
   if (families.includes('rhythm') && /^(\d{2,}?)\1+$/.test(digits)) add('rhythm')
   if (families.includes('powers') && isSquare(value)) add('square')
+  let facts: ReturnType<typeof integerFacts> | undefined
+  const unknown = { factors: null, divisorCount: null, divisorSum: null }
+  for (const id of properties) {
+    const rule = researchProperties[id]
+    if ('needsFactors' in rule && rule.needsFactors) facts ??= integerFacts(value)
+    if (rule.test(value, digits, facts ?? unknown)) add(id)
+  }
   return result
 }

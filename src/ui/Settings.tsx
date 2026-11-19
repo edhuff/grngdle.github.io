@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { type Game, type Settings } from '../game/game'
-import { exportSave, importSave } from '../game/save'
+import { maxSaveSize, exportSave, importSave } from '../game/save'
 
 export function SettingsView({ game, onSettings, onImport, onReset }: {
   game: Game; onSettings: (settings: Settings) => void; onImport: (game: Game) => void; onReset: () => void
@@ -24,7 +24,7 @@ export function SettingsView({ game, onSettings, onImport, onReset }: {
 
   async function read(file: File) {
     try {
-      if (file.size > 1_000_000) throw new Error('The save file exceeds 1 MB.')
+      if (file.size > maxSaveSize) throw new Error('The save file exceeds 3 MB.')
       setReplacement(importSave(await file.text(), game.lab))
       setError(false)
       setMessage('')

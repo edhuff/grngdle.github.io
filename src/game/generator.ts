@@ -2,7 +2,7 @@ import { integer, type Expression } from './math/ast'
 import type { Rational } from './math/evaluate'
 import { fraction, multiplyProbability } from './math/probability'
 import { advancedFamilies, snapshot, type AdvancedFamily, type GeneratorOptions } from './generation/config'
-import { integerRange, product, type Domain } from './generation/domains'
+import { integerRange, terminalWeighted, product, type Domain } from './generation/domains'
 import { advancedDomains } from './generation/families'
 import { cryptoWord, uniformBelow, type WordSource } from './generation/random'
 
@@ -57,7 +57,7 @@ function arithmeticDomain(max: bigint, nested: boolean): Domain {
 }
 
 export function distribution(options: GeneratorOptions) {
-  const anomaly = BigInt(Math.min(6, options.anomaly))
+  const anomaly = BigInt(Math.min(options.expansionDigits === undefined ? 6 : 10, options.anomaly))
   const max = options.specialization === 'magnitude' ? 999n : 99n
   const bias = options.specialization === 'rarity' ? 4n : 0n
   const reach = options.specialization === 'magnitude' ? 4n : 0n
@@ -66,12 +66,14 @@ export function distribution(options: GeneratorOptions) {
     bands.push({ id, weight, outcomes: domain.outcomes, domain })
   }
 
-  if (options.wide) add('expanded', 22n + anomaly + reach, integerRange(CLASSICAL_MAX + 1n, EXPANDED_MAX))
-  if (options.vast) add('vast', 4n + anomaly + bias, integerRange(EXPANDED_MAX + 1n, VAST_MAX))
+  const expandedMax = options.expansionDigits === undefined ? EXPANDED_MAX : 10n ** BigInt(options.expansionDigits)
+  const expandedWeight = options.expansionDigits === undefined ? 22n : 12n
+  if (options.wide) add('expanded', expandedWeight + anomaly + reach, integerRange(CLASSICAL_MAX + 1n, expandedMax))
+  if (options.vast) add('vast', 4n + anomaly + bias, integerRange((options.wide ? expandedMax : EXPANDED_MAX) + 1n, VAST_MAX))
   if (options.arithmetic) add('arithmetic', 12n + bias, arithmeticDomain(max, false))
   if (options.nesting) add('nested', 3n + bias, arithmeticDomain(max, true))
   const weight = DISTRIBUTION_TOTAL - bands.reduce((sum, band) => sum + band.weight, 0n)
-  const classical = integerRange(0n, CLASSICAL_MAX)
+  const classical = options.terminal ? terminalWeighted(CLASSICAL_MAX, options.terminal) : integerRange(0n, CLASSICAL_MAX)
   bands.unshift({ id: 'classical', weight, outcomes: classical.outcomes, domain: classical })
   for (const id of advancedFamilies) {
     const params = options.advanced?.[id]

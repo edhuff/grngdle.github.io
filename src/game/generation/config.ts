@@ -11,6 +11,8 @@ export type GeneratorOptions = {
   nesting: boolean
   anomaly: number
   specialization: 'magnitude' | 'rarity' | 'efficiency' | null
+  expansionDigits?: number
+  terminal?: readonly number[]
   advanced?: Partial<Record<AdvancedFamily, FamilyParameters>>
 }
 
@@ -53,6 +55,10 @@ export function snapshot(options: GeneratorOptions): GeneratorOptions {
     const params = options.advanced?.[id]
     if (params) advanced[id] = checkParameters(id, params)
   }
-  return { wide, vast, arithmetic, nesting, anomaly: boundedInt(anomaly, 0, Number.MAX_SAFE_INTEGER), specialization,
+  const expansionDigits = options.expansionDigits === undefined ? undefined : boundedInt(options.expansionDigits, 7, 12)
+  const terminal = options.terminal
+  if (terminal && terminal.length !== 10) throw new RangeError('Expected ten terminal digit weights')
+  return { wide, vast, arithmetic, nesting, ...(expansionDigits === undefined ? {} : { expansionDigits }),
+    ...(terminal ? { terminal: terminal.map(weight => boundedInt(weight, 0, 100)) } : {}), anomaly: boundedInt(anomaly, 0, Number.MAX_SAFE_INTEGER), specialization,
     ...(Object.keys(advanced).length ? { advanced } : {}) }
 }

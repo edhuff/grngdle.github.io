@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { badgeIds, badgeRule, evaluateAttributes, initialFamilies, isPrime } from '../src/game/attributes'
+import { researchProperties } from '../src/game/research-properties'
 import { rewards } from '../src/game/economy'
 import { manualRoll, newGame, progress, purchase, refund, rollRarity } from '../src/game/game'
-import { CLASSICAL_MAX, DISTRIBUTION_TOTAL, EXPANDED_MAX, VAST_MAX, generate, generatorBands, seededWords, uniformBelow } from '../src/game/generator'
+import { CLASSICAL_MAX, DISTRIBUTION_TOTAL, VAST_MAX, generate, generatorBands, seededWords, uniformBelow } from '../src/game/generator'
 import { depth, fraction, integer, magnitude, notation, rarityOf } from '../src/game/math'
 import { milestones } from '../src/game/progression'
 import { classicalRoute, dependencies, effectsOf, meets, rankCost, research, researchById, researchRoute, researchStatus, startingStudy, validateResearch, type ResearchNode } from '../src/game/research'
@@ -60,7 +61,7 @@ test('classical badge reference frequencies match exhaustive evaluation', () => 
   for (let value = 0n; value <= CLASSICAL_MAX; value++) {
     for (const badge of evaluateAttributes(integer(value), families)) totals.set(badge.id, totals.get(badge.id)! + 1)
   }
-  for (const [id, total] of totals) assert.equal(total, badgeRule(id).count ?? 0, id)
+  for (const [id, total] of totals) if (!Object.hasOwn(researchProperties, id)) assert.equal(total, badgeRule(id).count ?? 0, id)
 })
 
 test('one manual invocation records one roll and credits exactly the badge and research total', () => {
@@ -114,13 +115,9 @@ test('research validates cycles, missing nodes, AND and OR prerequisites', () =>
   }
 })
 
-test('research has one root and every study feeds a major milestone', () => {
+test('research has one root and all side studies connect to it', () => {
   assert.deepEqual(research.filter(item => !dependencies(item.requires).length).map(item => item.id), [startingStudy])
-  const routes = milestones.map(researchRoute)
-  for (const item of research) {
-    assert(researchRoute(item.id).has(startingStudy), item.id)
-    assert(routes.some(route => route.has(item.id)), item.id)
-  }
+  for (const item of research) assert(researchRoute(item.id).has(startingStudy), item.id)
   for (const id of ['journal', 'archive', 'inspection', 'registry']) assert(!researchById.has(id))
 })
 
@@ -186,11 +183,11 @@ test('unlocked generation bands retain the Classical range and have normalized e
   }
   assert.equal(sum, DISTRIBUTION_TOTAL)
   const wide = generate(effectsOf({ expansion: 1 }).generator, (() => {
-    const words = [78, 0, 0]
+    const words = [88, 0]
     return () => words.shift()!
   })())
   assert.deepEqual(wide.expression, integer(CLASSICAL_MAX + 1n))
-  assert.equal(bands[2].outcomes, VAST_MAX - EXPANDED_MAX)
+  assert.equal(bands[2].outcomes, VAST_MAX - 10_000_000n)
 })
 
 test('large integer sampling and AST notation avoid Number precision loss', () => {
@@ -213,7 +210,7 @@ test('versioned saves round-trip records, validate purchases, and isolate develo
   assert.deepEqual(importSave(saved), game)
   assert.throws(() => importSave(saved, true), /different game mode/)
   assert.throws(() => importSave('{'), /JSON/)
-  assert.throws(() => importSave(saved.replace('"schema":5', '"schema":55')), /unsupported/)
+  assert.throws(() => importSave(saved.replace('"schema":6', '"schema":55')), /unsupported/)
   assert.throws(() => importSave(saved.replace('"purchases":{', '"purchases":{"__proto__":1,')), /Malformed/)
   assert.throws(() => importSave(saved.replace(/"balance":"\d+"/, '"balance":"0"')), /Research spending/)
   const altered = JSON.parse(saved)
@@ -236,12 +233,17 @@ test('legacy saves keep research and history and receive a rebate on old prices'
   const legacy = JSON.parse(exportSave(game))
   legacy.schema = 2
   legacy.balance = String(game.lifetime - oldSpending)
-  assert.deepEqual(importSave(JSON.stringify(legacy)), game)
+  const migrated = importSave(JSON.stringify(legacy))
+  assert.deepEqual(migrated.recent, game.recent)
+  assert.deepEqual(migrated.discoveries, game.discoveries)
+  assert.deepEqual(migrated.purchases, game.purchases)
+  assert.equal(migrated.balance, game.balance)
+  assert((migrated.sourceCounts.classical ?? 0) < game.rolls)
   assert.equal(game.balance - BigInt(legacy.balance), 528n)
 
   legacy.schema = 1
   delete legacy.settings.showBadgeOdds
-  assert.deepEqual(importSave(JSON.stringify(legacy)), game)
+  assert.deepEqual(importSave(JSON.stringify(legacy)), migrated)
   legacy.balance = '1'
   assert.throws(() => importSave(JSON.stringify(legacy)), /Research spending/)
 })

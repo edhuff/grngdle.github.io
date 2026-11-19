@@ -12,7 +12,8 @@
     "balance": "tsx scripts/balance.ts",
     "test:browser": "tsx tests/browser.mjs",
     "build:pages": "npm run build && node scripts/prepare-pages.mjs",
-    "validate:generation": "tsx scripts/validate-generation.ts"
+    "validate:generation": "tsx scripts/validate-generation.ts",
+    "measure:badges": "tsx scripts/measure-classical-badges.ts"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

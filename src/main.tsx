@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { manualRoll, newGame, purchase, refund, type Game } from './game/game'
+import { toggleBookmark, manualRoll, newGame, purchase, refund, type Game } from './game/game'
 import { integerText } from './game/math'
 import { loadLocal, saveLocal } from './game/save'
 import { Play } from './ui/Play'
@@ -64,7 +64,7 @@ function App() {
       {lab && <div className="notice">Developer lab · Reduced research costs and badge requirements · Isolated save</div>}
       {warning && <div className="notice" role="alert">{warning}</div>}
       {page === 'Play' && <Play game={game} rolling={rolling} onRoll={clickRoll} onResearch={id => open('Research', id)} />}
-      {page === 'Research' && <ResearchView game={game} initialFocus={researchFocus} onBuy={id => commit(purchase(current.current, id))} onRefund={id => commit(refund(current.current, id))} />}
+      {page === 'Research' && <ResearchView game={game} initialFocus={researchFocus} onBuy={id => commit(purchase(current.current, id))} onRefund={id => commit(refund(current.current, id))} onBookmark={id => commit(toggleBookmark(current.current, id))} />}
       {page === 'Collection' && <Collection game={game} />}
       {page === 'Statistics' && <Statistics game={game} />}
       {page === 'Settings' && <SettingsView game={game} onSettings={settings => commit({ ...current.current, settings })} onImport={commit} onReset={() => commit(newGame(lab))} />}

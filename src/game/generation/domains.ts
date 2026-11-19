@@ -95,3 +95,31 @@ export function digitStrings(maxLength: number, zeroWeight: number): Domain {
     valueOdds: odds,
   }
 }
+
+/** Assign sixteen base tickets to every value and optional extras by final digit.
+ * The base and bonus tickets may denote the same integer, so report their sum. */
+export function terminalWeighted(high: bigint, extras: readonly number[]): Domain {
+  const base = 16n
+  const outcomes = high + 1n
+  const counts = extras.map((extra, digit) => ({ digit: BigInt(digit), weight: BigInt(extra), count: high >= BigInt(digit) ? (high - BigInt(digit)) / 10n + 1n : 0n }))
+  const tickets = base * outcomes + counts.reduce((sum, item) => sum + item.weight * item.count, 0n)
+  function odds(value: Rational) {
+    if (value.denominator !== 1n || value.numerator < 0n || value.numerator > high) return fraction(0n, 1n)
+    return fraction(base + counts[Number(value.numerator % 10n)].weight, tickets)
+  }
+  return {
+    tickets, outcomes,
+    at(ticket) {
+      if (ticket < base * outcomes) return integer(ticket % outcomes)
+      ticket -= base * outcomes
+      for (const item of counts) {
+        const width = item.weight * item.count
+        if (ticket < width) return integer(item.digit + 10n * (ticket % item.count))
+        ticket -= width
+      }
+      throw new RangeError('Invalid classical ticket')
+    },
+    odds: (_, expression) => odds({ numerator: expression.kind === 'integer' ? expression.value : 0n, denominator: 1n }),
+    valueOdds: odds,
+  }
+}

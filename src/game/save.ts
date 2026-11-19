@@ -1,12 +1,12 @@
 import { badgeIds, badgeRule, type Badge, type BadgeFamily, type BadgeId } from './attributes'
-import { newGame, progress, recentRollLimit, type Game, type Roll } from './game'
+import { newGame, progress, sortRecords, type Game, type Roll } from './game'
 import { rarityEvent } from './economy'
 import { advancedFamilies, checkParameters, type AdvancedFamily, type GeneratorOptions } from './generation/config'
 import { CLASSICAL_MAX, EXPANDED_MAX, GENERATOR_VERSION, VAST_MAX, replay, sourceNames, type Source } from './generator'
 import { depth, fraction, magnitude, rarities, type Expression, type Fraction } from './math'
-import { meets, owns, rankCost, researchById } from './research'
+import { effectsOf, meets, originalResearch, owns, rankCost, researchById, specializationOf } from './research'
 
-const maxSize = 1_000_000
+export const maxSaveSize = 3_000_000
 const storageKey = (lab: boolean) => 'grngdle.save.' + (lab ? 'lab' : 'production')
 const families = new Set(badgeIds.map(id => badgeRule(id).family))
 const retiredDiscoveryCosts = new Map([
@@ -44,6 +44,11 @@ function configurationOf(value: unknown): GeneratorOptions {
   const options: GeneratorOptions = {
     wide: bool(raw.wide), vast: bool(raw.vast), arithmetic: bool(raw.arithmetic), nesting: bool(raw.nesting),
     anomaly: count(raw.anomaly), specialization,
+  }
+  if (raw.expansionDigits !== undefined) options.expansionDigits = count(raw.expansionDigits, 7, 12)
+  if (raw.terminal !== undefined) {
+    if (!Array.isArray(raw.terminal) || raw.terminal.length !== 10) return invalid()
+    options.terminal = raw.terminal.map(weight => count(weight, 0, 100))
   }
   if (raw.advanced !== undefined) {
     options.advanced = {}
@@ -130,7 +135,7 @@ function rollOf(value: unknown, rolls: number, lifetime: bigint): Roll {
   const earned = decimal(item.earned)
   const bonus = decimal(item.bonus)
   if (earned > lifetime || earned !== bonus + badges.reduce((sum, badge) => sum + badge.reward, 0n)) return invalid()
-  const generation = evidence && { configuration: evidence.configuration, ticket: evidence.ticket, event: rarityEvent(source, badges, evidence.event) }
+  const generation = evidence && { configuration: evidence.configuration, ticket: evidence.ticket, event: rarityEvent(source, badges, evidence.event, evidence.configuration.terminal) }
   if (generation && !matchesEncoded(object(item.generation).event, generation.event)) return invalid()
   return { index: count(item.index, 1, rolls), expression, probability, source, generatorVersion,
     ...(generation ? { generation } : {}), badges, earned, bonus }
@@ -144,12 +149,12 @@ export function exportSave(game: Game) {
 
 function migrate(raw: Record<string, unknown>) {
   if (raw.schema === 1) return { ...raw, settings: { ...object(raw.settings), showBadgeOdds: false } }
-  if (raw.schema !== 2 && raw.schema !== 3 && raw.schema !== 4 && raw.schema !== 5) return invalid('This save version is unsupported.')
+  if (raw.schema !== 2 && raw.schema !== 3 && raw.schema !== 4 && raw.schema !== 5 && raw.schema !== 6) return invalid('This save version is unsupported.')
   return raw
 }
 
 export function importSave(text: string, lab = false): Game {
-  if (text.length > maxSize) return invalid('The save file exceeds 1 MB.')
+  if (text.length > maxSaveSize) return invalid('The save file exceeds 3 MB.')
   let parsed: unknown
   try { parsed = JSON.parse(text) } catch { return invalid('The file is not valid JSON.') }
   const raw = migrate(object(parsed))
@@ -163,9 +168,15 @@ export function importSave(text: string, lab = false): Game {
   const purchases: Game['purchases'] = {}
   let savedSpent = 0n
   let currentSpent = 0n
+  const currentSchema = raw.schema === 6
+  const payments: Game['payments'] = {}
+  const rawPayments = currentSchema ? object(raw.payments) : {}
+  const isDoctrine = (id: string) => researchById.get(id)?.effects.some(effect => effect.kind === 'specialize')
+  const milestonesKept = new Set<string>()
   let specializations = 0
   for (const [id, value] of Object.entries(object(raw.purchases))) {
     const item = researchById.get(id)
+    if (item?.unavailable || (item && !currentSchema && !originalResearch.has(id))) return invalid()
     if (!item) {
       const retiredCost = legacySave ? retiredDiscoveryCosts.get(id) : undefined
       if (retiredCost === undefined) return invalid()
@@ -176,13 +187,32 @@ export function importSave(text: string, lab = false): Game {
     }
     const rank = count(value, 1, item.max ?? 1)
     purchases[id] = rank
+    const ledger = rawPayments[id]
+    if (currentSchema && (!Array.isArray(ledger) || ledger.length !== rank)) return invalid()
+    payments[id] = []
     for (let level = 0; level < rank; level++) {
-      savedSpent += rankCost(item, level, lab, legacyPricing ? item.legacyCost : item.cost)
-      currentSpent += rankCost(item, level, lab)
+      const former = item.previousCost ?? item.cost
+      const oldPrice = rankCost(item, level, lab, legacyPricing ? item.legacyCost : former)
+      const full = rankCost(item, level, lab)
+      const paid = currentSchema && Array.isArray(ledger) ? decimal(ledger[level]) : rankCost(item, level, lab, former)
+      const floor = (full * 5500n + 9999n) / 10000n
+      const validLegacyPrice = item.previousCost !== undefined && paid === rankCost(item, level, lab, former) &&
+        (!currentSchema || id !== 'expansion' || raw.legacyRange === true)
+      if (paid > full || (paid < floor && !validLegacyPrice)) return invalid()
+      savedSpent += currentSchema ? paid : oldPrice
+      currentSpent += paid
+      payments[id].push(paid)
     }
-    if (item.refundable) specializations++
+    if (isDoctrine(id)) specializations++
   }
-  if (specializations > 1 || savedBalance + savedSpent !== lifetime) return invalid('Research spending does not match lifetime EP.')
+  if (Object.keys(rawPayments).some(id => !owns(purchases, id))) return invalid()
+  if (specializations > 1 || Object.keys(purchases).some(id => {
+    const doctrine = researchById.get(id)?.doctrine
+    return doctrine && doctrine !== specializationOf(purchases)
+  }) || savedBalance + savedSpent !== lifetime) return invalid('Research spending does not match lifetime EP.')
+  const legacyRange = currentSchema ? bool(raw.legacyRange) : !!owns(purchases, 'expansion')
+  if (legacyRange && !owns(purchases, 'expansion')) return invalid()
+  const { capacities } = effectsOf(purchases, legacyRange)
   const discoveries: Game['discoveries'] = {}
   for (const [key, value] of Object.entries(object(raw.discoveries))) {
     if (!families.has(key as BadgeFamily)) return invalid()
@@ -206,34 +236,92 @@ export function importSave(text: string, lab = false): Game {
     }
     return decoded
   }
-  const recent = readRolls('recent', recentRollLimit)
+  const recent = readRolls('recent', capacities.recent)
   if (recent.some((roll, index) => roll.index !== rolls - index)) return invalid()
-  const rarest = readRolls('rarest', 12)
-  const highest = readRolls('highest', 12)
-  const largest = readRolls('largest', 12)
+  const rarest = readRolls('rarest', capacities.rarest)
+  const highest = readRolls('highest', capacities.highest)
+  const largest = readRolls('largest', capacities.largest)
   if (largest.some(roll => magnitude(roll.expression) === null)) return invalid()
+  sortRecords(rarest, 'rarest')
+  sortRecords(highest, 'highest')
+  sortRecords(largest, 'largest')
   const settings = object(raw.settings)
+  const storedRolls = new Map([...recent, ...rarest, ...highest, ...largest].map(roll => [roll.index, roll]))
+  const observed: Game['observations'] = {}
+  const sources: Game['sourceCounts'] = {}
+  for (const roll of storedRolls.values()) {
+    sources[roll.source] = (sources[roll.source] ?? 0) + 1
+    for (const badge of roll.badges) {
+      const old = observed[badge.id]
+      observed[badge.id] = { first: Math.min(roll.index, old?.first ?? roll.index), count: 1 + (old?.count ?? 0) }
+    }
+  }
+
+  const bookmarks: string[] = []
+  if (currentSchema) {
+    if (!Array.isArray(raw.bookmarks) || raw.bookmarks.length > researchById.size) return invalid()
+    for (const id of raw.bookmarks) {
+      if (typeof id !== 'string' || !researchById.has(id) || bookmarks.includes(id)) return invalid()
+      bookmarks.push(id)
+    }
+  }
+
+  const observations: Game['observations'] = {}
+  const sourceCounts: Game['sourceCounts'] = {}
+  if (currentSchema) {
+    for (const [key, value] of Object.entries(object(raw.observations))) {
+      const id = key as BadgeId
+      if (!badgeIds.includes(id)) return invalid()
+      const { first, count: hits } = object(value)
+      const index = count(first, 1, rolls)
+      const familyHits = discoveries[badgeRule(id).family] ?? 0
+      const known = observed[id]
+      if (known && index > known.first) return invalid()
+      const firstRoll = storedRolls.get(index)
+      if (firstRoll && !firstRoll.badges.some(badge => badge.id === id)) return invalid()
+      observations[id] = { first: index, count: count(hits, known?.count ?? 1, Math.min(familyHits, rolls - index + 1)) }
+    }
+    for (const [key, value] of Object.entries(object(raw.sourceCounts))) {
+      const id = key as Source
+      if (!Object.hasOwn(sourceNames, id)) return invalid()
+      sourceCounts[id] = count(value, sources[id] ?? 1, rolls)
+    }
+    if (Object.keys(observed).some(key => !observations[key as BadgeId]) ||
+      Object.keys(sources).some(key => !sourceCounts[key as Source]) ||
+      Object.values(sourceCounts).reduce((sum, hits) => sum + hits, 0) > rolls) return invalid()
+  } else {
+    Object.assign(observations, observed)
+    Object.assign(sourceCounts, sources)
+  }
   const game: Game = {
-    schema: 5, lab, rolls, lifetime, balance: lifetime - currentSpent, purchases, retainedResearch: [], discoveries, distribution, recent, rarest, highest, largest,
+    schema: 6, lab, rolls, lifetime, balance: lifetime - currentSpent, purchases, payments, retainedResearch: [],
+    legacyRange, bookmarks, observations, sourceCounts, discoveries, distribution, recent, rarest, highest, largest,
     settings: { animations: bool(settings.animations), reducedEffects: bool(settings.reducedEffects), showBadgeOdds: bool(settings.showBadgeOdds) },
   }
   const current = progress(game)
   const unmet = Object.keys(purchases).filter(id => !meets(researchById.get(id)?.requires, current, lab))
-  if (legacySave) {
-    game.retainedResearch = unmet
-    return game
+  if (!legacySave) {
+    if (!Array.isArray(raw.retainedResearch)) return invalid()
+    for (const id of raw.retainedResearch) {
+      if (typeof id !== 'string' || !owns(purchases, id) || milestonesKept.has(id) || (currentSchema && researchById.get(id)?.doctrine)) return invalid()
+      if (currentSchema && !originalResearch.has(id)) {
+        const item = researchById.get(id)!
+        const possible = ['magnitude', 'rarity', 'efficiency'].some(doctrine => {
+          const purchasesWithDoctrine = { ...purchases }
+          for (const [candidate, neighbor] of researchById) if (neighbor.doctrine === doctrine) purchasesWithDoctrine[candidate] = 1
+          return meets(item.requires, { ...current, purchases: purchasesWithDoctrine }, lab)
+        })
+        if (!possible) return invalid('Research prerequisites are missing.')
+      }
+      milestonesKept.add(id)
+    }
+    if (unmet.some(id => {
+      if (milestonesKept.has(id)) return false
+      const previous = researchById.get(id)?.priorRequires
+      return currentSchema || !previous || !meets(previous, current, lab)
+    })) return invalid('Research prerequisites are missing.')
   }
-
-  if (!Array.isArray(raw.retainedResearch)) return invalid()
-  const retained = new Set<string>()
-  for (const id of raw.retainedResearch) {
-    if (typeof id !== 'string' || !owns(purchases, id) || retained.has(id)) return invalid()
-    retained.add(id)
-  }
-  if (unmet.some(id => !retained.has(id))) {
-    return invalid('Research prerequisites are missing.')
-  }
-  game.retainedResearch = [...retained]
+  game.retainedResearch = unmet
   return game
 }
 

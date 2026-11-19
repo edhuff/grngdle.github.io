@@ -1,128 +1,91 @@
-export const nodeWidth = 164
-export const nodeHeight = 56
+import { dependencies, research, startingStudy } from '../game/research'
+import { classicalClusters } from '../game/research/classical'
+import type { ResearchNode } from '../game/research/model'
 
+export const nodeWidth = 178
+export const nodeHeight = 62
 export type Point = { x: number; y: number }
+export type Box = { left: number; top: number; right: number; bottom: number }
 
-const positions: Record<string, [number, number]> = {
-  yield: [720, 55],
-  'place-value': [333, 145], catalog: [760, 145], odds: [1050, 145], compound: [1280, 145],
-  radix: [196, 238], repetition: [444, 238], notation: [628, 238], squares: [840, 238], distribution: [1050, 238], fieldwork: [1280, 238],
-  boundaries: [115, 333], measurement: [299, 333], motifs: [482, 333], operators: [677, 333],
-  classifier: [870, 333], variance: [1050, 333], synergy: [1280, 333],
-  horizon: [115, 430], bounds: [302, 430], symmetry: [490, 430], atlas: [875, 430], 'tail-model': [1050, 430], 'peer-review': [1280, 430],
-  invariants: [302, 520], 'pattern-model': [490, 520], syntax: [686, 520], capital: [1280, 520],
-  verification: [302, 613], grammar: [686, 613],
-  synthesis: [473, 716], 'classical-review': [1020, 716],
-  expansion: [720, 822],
-  anomaly: [380, 931], 'magnitude-focus': [605, 931], 'rarity-focus': [833, 931], 'efficiency-focus': [1060, 931],
-  arithmetic: [720, 1040], nesting: [720, 1144], vast: [720, 1248],
-  'exact-operations': [422, 1144], 'digit-strings': [720, 1352], 'digit-spectrum': [720, 1456],
-  exponentiation: [720, 1560], 'tower-reach': [720, 1664], 'power-towers': [720, 1768],
-  hyperoperations: [720, 1872], 'arrow-spectrum': [720, 1976], 'conway-chains': [720, 2080],
-  'ordinal-hierarchy': [720, 2184], 'extreme-googology': [720, 2288],
+function edgePath(from: Point, to: Point) {
+  const y1 = from.y + nodeHeight / 2
+  const y2 = to.y - nodeHeight / 2
+  const middle = (y1 + y2) / 2
+  return `M${from.x},${y1} C${from.x},${middle} ${to.x},${middle} ${to.x},${y2}`
 }
 
-export function positionOf(id: string): Point {
-  const point = positions[id]
-  if (!point) throw new Error('Missing research position for ' + id)
-  return { x: point[0], y: point[1] }
-}
-
-function roundedPath(route: Point[]) {
-  const points = route.filter((point, index) =>
-    index === 0 || point.x !== route[index - 1].x || point.y !== route[index - 1].y)
-  const segments = [`M${points[0].x},${points[0].y}`]
-
-  for (let index = 1; index < points.length - 1; index++) {
-    const [previous, corner, next] = [points[index - 1], points[index], points[index + 1]]
-    if ((previous.x === corner.x && next.x === corner.x) ||
-        (previous.y === corner.y && next.y === corner.y)) continue
-
-    const incoming = Math.hypot(previous.x - corner.x, previous.y - corner.y)
-    const outgoing = Math.hypot(next.x - corner.x, next.y - corner.y)
-    const radius = Math.min(22, incoming / 2, outgoing / 2)
-    const before = {
-      x: corner.x + (previous.x - corner.x) * radius / incoming,
-      y: corner.y + (previous.y - corner.y) * radius / incoming,
-    }
-    const after = {
-      x: corner.x + (next.x - corner.x) * radius / outgoing,
-      y: corner.y + (next.y - corner.y) * radius / outgoing,
-    }
-    segments.push(`L${before.x},${before.y} Q${corner.x},${corner.y} ${after.x},${after.y}`)
+export function buildAtlases(nodes: readonly ResearchNode[]) {
+  const researchById = new Map(nodes.map(item => [item.id, item]))
+  const regionSizes = Array.from({ length: 8 }, (_, region) => nodes.filter(item => item.region === region))
+  const depths = new Map<string, number>()
+  function depth(item: ResearchNode): number {
+    const cached = depths.get(item.id)
+    if (cached !== undefined) return cached
+    const parents = dependencies(item.requires).map(id => researchById.get(id)!).filter(parent => parent.region === item.region)
+    const rank = parents.length ? 1 + Math.max(...parents.map(depth)) : 0
+    depths.set(item.id, rank)
+    return rank
   }
 
-  const last = points[points.length - 1]
-  segments.push(`L${last.x},${last.y}`)
-  return segments.join(' ')
-}
-
-export function progressionPath(from: Point, to: Point, points: Point[]) {
-  const halfWidth = nodeWidth / 2
-  const halfHeight = nodeHeight / 2
-  const gutter = 8
-  const fromPort = { x: from.x, y: from.y + halfHeight }
-  const toPort = { x: to.x, y: to.y - halfHeight }
-  const middle = (fromPort.y + toPort.y) / 2
-  const curve = `M${fromPort.x},${fromPort.y} C${from.x},${middle} ${to.x},${middle} ${toPort.x},${toPort.y}`
-  const steps = Math.ceil(Math.max(Math.abs(to.x - from.x), toPort.y - fromPort.y) / 6)
-  const obstacles = points.filter(point => (point.x !== from.x || point.y !== from.y) && (point.x !== to.x || point.y !== to.y))
-  let blocked = false
-  for (let index = 1; index < steps; index++) {
-    const t = index / steps
-    const rest = 1 - t
-    const x = from.x * (rest ** 3 + 3 * rest ** 2 * t) + to.x * (3 * rest * t ** 2 + t ** 3)
-    const y = fromPort.y * rest ** 3 + middle * 3 * rest * t + toPort.y * t ** 3
-    if (obstacles.some(point => Math.abs(point.x - x) < halfWidth + gutter && Math.abs(point.y - y) < halfHeight + gutter)) {
-      blocked = true
-      break
-    }
-  }
-  if (!blocked) return curve
-
-  const start = { x: fromPort.x, y: fromPort.y + gutter }
-  const end = { x: toPort.x, y: toPort.y - gutter }
-
-  const segmentIsClear = (a: Point, b: Point) => !points.some(node =>
-    Math.min(a.x, b.x) < node.x + halfWidth + gutter &&
-    Math.max(a.x, b.x) > node.x - halfWidth - gutter &&
-    Math.min(a.y, b.y) < node.y + halfHeight + gutter &&
-    Math.max(a.y, b.y) > node.y - halfHeight - gutter
-  )
-
-  let best: Point[] | undefined
-  let distance = Infinity
-  const consider = (corners: Point[]) => {
-    const path = [start, ...corners, end].filter((point, index, all) =>
-      index === 0 || point.x !== all[index - 1].x || point.y !== all[index - 1].y)
-    let score = 18 * path.length
-    for (let index = 1; index < path.length; index++) {
-      const a = path[index - 1]
-      const b = path[index]
-      if (!segmentIsClear(a, b)) return
-      score += Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
-    }
-    if (score < distance) {
-      distance = score
-      best = path
-    }
-  }
-  const xChannels = [...new Set(points.flatMap(({ x }) => [x - halfWidth - gutter, x + halfWidth + gutter]))]
-  const yChannels = [...new Set(points.flatMap(({ y }) => [y - halfHeight - gutter, y + halfHeight + gutter]))]
-  for (const x of [(start.x + end.x) / 2, start.x, end.x, ...xChannels]) {
-    consider([{ x, y: start.y }, { x, y: end.y }])
-  }
-  for (const y of [(start.y + end.y) / 2, start.y, end.y, ...yChannels]) {
-    consider([{ x: start.x, y }, { x: end.x, y }])
-  }
-  if (!best) {
-    for (const x of xChannels) {
-      for (const y of yChannels) {
-        consider([{ x, y: start.y }, { x, y }, { x: end.x, y }])
-        consider([{ x: start.x, y }, { x, y }, { x, y: end.y }])
+  return regionSizes.map((items, region) => {
+    const groups = region === 0 ? [...classicalClusters] : [...new Set(items.map(item => item.cluster!))]
+    // Each stage spans all clusters. This keeps cross-cluster prerequisites flowing forward.
+    const positions = new Map<string, Point>()
+    const lanes = groups.map(name => {
+      const stages = new Map<number, ResearchNode[]>()
+      for (const item of items.filter(item => item.cluster === name)) {
+        const rank = depth(item)
+        const group = stages.get(rank) ?? []
+        group.push(item)
+        stages.set(rank, group)
       }
+      return { name, stages }
+    })
+    const stageCount = Math.max(0, ...items.map(depth)) + 1
+    // Move the founding study to the center of the opening branches.
+    const openingLane = groups.indexOf('EP Economics')
+    const laneWidths = lanes.map(lane => 46 + Math.min(3, Math.max(1, ...[...lane.stages.values()].map(group => group.length))) * 202)
+    const laneOffsets = laneWidths.map((_, index) => 18 + laneWidths.slice(0, index).reduce((sum, width) => sum + width, 0))
+    const lanesWithBoxes = lanes.map((lane, index) => ({ ...lane, left: laneOffsets[index], width: laneWidths[index] }))
+    let y = 125
+    for (let rank = 0; rank < stageCount; rank++) {
+      let rows = 1
+      for (const lane of lanesWithBoxes) {
+        const group = lane.stages.get(rank) ?? []
+        const columns = Math.min(3, group.length)
+        rows = Math.max(rows, Math.ceil(group.length / 3))
+        group.forEach((item, index) => {
+          const row = Math.floor(index / 3)
+          const count = Math.min(columns, group.length - row * 3)
+          const x = lane.left + lane.width / 2 + (index % 3 - (count - 1) / 2) * 202
+          positions.set(item.id, { x, y: y + row * 77 + (index % 2 ? 7 : 0) })
+        })
+      }
+      y += rows * 90 + 22
     }
-  }
+    if (openingLane >= 0 && positions.has(startingStudy) && positions.has('place-value') && positions.has('catalog')) {
+      const start = positions.get(startingStudy)!
+      const place = positions.get('place-value')!
+      const catalog = positions.get('catalog')!
+      start.x = (place.x + catalog.x) / 2
+    }
 
-  return best ? roundedPath([fromPort, ...best, toPort]) : curve
+    const edges = items.flatMap(item => dependencies(item.requires).flatMap(from => {
+      const a = positions.get(from)
+      const b = positions.get(item.id)!
+      if (!a) return []
+      return [{
+        from, to: item.id, path: edgePath(a, b),
+        bounds: { left: Math.min(a.x, b.x), right: Math.max(a.x, b.x), top: a.y, bottom: b.y },
+        crossCluster: researchById.get(from)?.cluster !== item.cluster,
+      }]
+    }))
+    return { items, positions, edges, groups: lanesWithBoxes, width: 36 + laneWidths.reduce((sum, width) => sum + width, 0), height: y }
+  })
+}
+
+export const atlases = buildAtlases(research)
+
+export function overlaps(a: Box, b: Box) {
+  return a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top
 }
